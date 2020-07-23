@@ -1,0 +1,17 @@
+*neoclip.txt*           Neovim clipboard provider for MS Windows
+
+==============================================================================
+OVERVIEW                                                             *neoclip*
+
+|Neoclip| is a clipboard provider for Neovim |provider-clipboard|.
+
+Neoclip only supports MS Windows. Effectively it obsoletes win32yank.
+
+There's no special installation instructions. Just use |:checkhealth| to
+ensure that |Neoclip| is up and running.
+
+C source code is available under `src/` subdirectory. You'll need Lua5.1 (or
+LuaJIT) development package to re-compile it yourself.
+
+==============================================================================
+ vim:tw=78:ts=8:noet:ft=help:norl:
