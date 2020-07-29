@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Jul 23
+ * Last Change:  2020 Jul 24
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -18,10 +18,8 @@ __declspec(dllexport)
 int luaopen_neoclip_w32(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
-        { "getstar", neo_get },
-        { "getplus", neo_get },
-        { "setstar", neo_set },
-        { "setplus", neo_set },
+        { "get", neo_get },
+        { "set", neo_set },
         { NULL, NULL }
     };
     luaL_register(L, "neoclip", methods);
@@ -29,10 +27,12 @@ int luaopen_neoclip_w32(lua_State* L)
 }
 
 
-// neoclip.get() -> [lines, regtype]
+// neoclip.get(regname) -> [lines, regtype]
 // read from the system clipboard
 int neo_get(lua_State* L)
 {
+    luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
+
     // a table to return
     lua_newtable(L);
 
@@ -72,18 +72,21 @@ int neo_get(lua_State* L)
 }
 
 
-// neoclip.set([lines, regtype]) -> boolean
+// neoclip.set(regname, lines, regtype) -> boolean
 // write to the system clipboard
 int neo_set(lua_State* L)
 {
-    luaL_checktype(L, 1, LUA_TTABLE);   // [lines, regtype]
+    luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
+    luaL_checktype(L, 2, LUA_TTABLE);   // lines
+    luaL_checktype(L, 3, LUA_TSTRING);  // regtype (unused)
+
     size_t cchDst = 0;
 
     if (OpenClipboard(NULL)) {
         EmptyClipboard();
 
         // join lines
-        lua_rawgeti(L, 1, 1);
+        lua_pushvalue(L, 2);
         neo_join(L, "\r\n");
 
         // get UTF-8

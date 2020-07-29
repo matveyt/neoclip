@@ -1,7 +1,7 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Jul 23
-" License:      http://unlicense.org
+" Last Change:  2020 Jul 29
+" License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
 if exists('g:loaded_neoclip') || !has('nvim')
@@ -12,32 +12,47 @@ let g:loaded_neoclip = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
-if has('win32')
-    lua require("neoclip_w32")
-else
-    echoerr 'neoclip: Unsupported platform'
-    finish
+if !exists('g:neoclip_channel')
+    let g:neoclip_channel = nvim_list_uis()[-1].chan
 endif
 
-function s:utf8(clip, ...) abort
-    if &enc is# 'utf-8' || empty(a:clip)
-        return a:clip
+if g:neoclip_channel <= 0
+    if has('win32')
+        lua require("neoclip_w32")
+    elseif has('unix') && exists('$DISPLAY')
+        lua require("neoclip_x11")
     else
-        let [l:from, l:to] = get(a:, 1, v:true) ? [&enc, 'utf-8'] : ['utf-8', &enc]
-        return [map(copy(a:clip[0]), {_, v -> iconv(v, l:from, l:to)}),
-            \ iconv(a:clip[1], l:from, l:to)]
+        echoerr 'neoclip: Unsupported platform'
+        finish
+    endif
+endif
+
+function s:get(regname) abort
+    if g:neoclip_channel > 0
+        return rpcrequest(g:neoclip_channel, 'Gui', 'GetClipboard', a:regname)
+    else
+        return v:lua.neoclip.get(a:regname)
+    endif
+endfunction
+
+function s:set(regname, lines, regtype) abort
+    if g:neoclip_channel > 0
+        call rpcnotify(g:neoclip_channel, 'Gui', 'SetClipboard',
+            \ a:lines, a:regtype, a:regname)
+    else
+        call v:lua.neoclip.set(a:regname, a:lines, a:regtype)
     endif
 endfunction
 
 let g:clipboard = {
     \   'name': 'neoclip',
     \   'copy': {
-    \       '+': {lines, regtype -> v:lua.neoclip.setplus(s:utf8([lines, regtype]))},
-    \       '*': {lines, regtype -> v:lua.neoclip.setstar(s:utf8([lines, regtype]))},
+    \       '+': function('s:set', ['+']),
+    \       '*': function('s:set', ['*']),
     \   },
     \   'paste': {
-    \       '+': {-> s:utf8(v:lua.neoclip.getplus(), v:false)},
-    \       '*': {-> s:utf8(v:lua.neoclip.getstar(), v:false)},
+    \       '+': function('s:get', ['+']),
+    \       '*': function('s:get', ['*']),
     \   },
 \ }
 

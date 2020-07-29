@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Jul 23
+ * Last Change:  2020 Jul 24
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -14,7 +14,7 @@
 #include <lauxlib.h>
 
 
-// neoclip_w32.c
+// exported to Lua
 extern int neo_get(lua_State* L);
 extern int neo_set(lua_State* L);
 
