@@ -1,6 +1,5 @@
-project('neoclip', 'c', default_options : \
-  ['buildtype=release', 'c_std=c11', 'default_library=shared', \
-  'strip=true', 'warning_level=3', 'werror=true'])
+project('neoclip', 'c', default_options : ['b_ndebug=if-release', 'buildtype=release',
+  'c_std=c99', 'default_library=shared', 'strip=true', 'warning_level=3', 'werror=true'])
 
 sources = ['splitjoin.c']
 c_args = []
@@ -17,5 +16,5 @@ elif host_machine.system() == 'linux'
 endif
   sources += neoclip + '.c'
 
-library(neoclip, sources, c_args : c_args, name_prefix : '', dependencies : deps, \
+library(neoclip, sources, c_args : c_args, dependencies : deps, name_prefix : '',
   install : true, install_dir : meson.source_root() / '../lua')

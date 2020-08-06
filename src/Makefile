@@ -15,6 +15,6 @@ else ifdef yama.IsPOSIX
     all: neoclip_x11
 endif
 
-$(call yama.goalDll,../lua/neoclip_w32,neoclip_w32 splitjoin,,build)
-$(call yama.goalDll,../lua/neoclip_x11,neoclip_x11 splitjoin neo_x,,build)
+$(call yama.goalDll,neoclip_w32,neoclip_w32 splitjoin,../lua/neoclip_w32,build)
+$(call yama.goalDll,neoclip_x11,neoclip_x11 splitjoin neo_x,../lua/neoclip_x11,build)
 $(call yama.rules,build)
