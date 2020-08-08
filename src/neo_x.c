@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 06
+ * Last Change:  2020 Aug 08
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -163,7 +163,7 @@ const void* neo_X_update(void* X, int sel, size_t* len)
 
     if (!pthread_mutex_lock(&x->lock)) {
         // wait upto one second
-        struct timespec t = {0, 0};
+        struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
         while (!x->f_rdy[ix] && !pthread_cond_timedwait(&x->c_rdy[ix], &x->lock, &t))
         {}  // nothing
@@ -192,15 +192,15 @@ static void* thread_main(void* X)
         XEvent xe;
         XNextEvent(x->d, &xe);
         switch (xe.type) {
-            case SelectionNotify:
-                on_sel_notify(x, &xe.xselection);
-                break;
-            case SelectionRequest:
-                on_sel_request(x, &xe.xselectionrequest);
-                break;
-            case ClientMessage:
-                stop = on_client_message(x, &xe.xclient);
-                break;
+        case SelectionNotify:
+            on_sel_notify(x, &xe.xselection);
+            break;
+        case SelectionRequest:
+            on_sel_request(x, &xe.xselectionrequest);
+            break;
+        case ClientMessage:
+            stop = on_client_message(x, &xe.xclient);
+            break;
         }
     } while (!stop);
 
@@ -271,8 +271,7 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
 {
     Atom param = (Atom)xcme->data.l[0];
 
-    // NEO_UPDATE
-    if (xcme->message_type == x->atom[neo_update]) {
+    if (xcme->message_type == x->atom[neo_update]) {        // NEO_UPDATE
         // sync our selection data with the system's
         Window owner = XGetSelectionOwner(x->d, param);
         if (owner == 0 || owner == x->w) {
@@ -285,14 +284,10 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
             XConvertSelection(x->d, param, x->atom[utf8], x->atom[neo_update], x->w,
                 CurrentTime);
         }
-
-    // NEO_OWNED
-    } else if (xcme->message_type == x->atom[neo_owned]) {
+    } else if (xcme->message_type == x->atom[neo_owned]) {  // NEO_OWNED
         // become selection owner
         XSetSelectionOwner(x->d, param, x->w, CurrentTime);
-
-    // WM_PROTOCOLS + WM_DELETE_WINDOW
-    } else if (xcme->message_type == x->atom[proto]) {
+    } else if (xcme->message_type == x->atom[proto]) {      // WM_DELETE_WINDOW
         return (param == x->atom[dele]);
     }
 
