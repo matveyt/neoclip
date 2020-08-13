@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 08
+ * Last Change:  2020 Aug 11
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -194,13 +194,13 @@ static void* thread_main(void* X)
         switch (xe.type) {
         case SelectionNotify:
             on_sel_notify(x, &xe.xselection);
-            break;
+        break;
         case SelectionRequest:
             on_sel_request(x, &xe.xselectionrequest);
-            break;
+        break;
         case ClientMessage:
             stop = on_client_message(x, &xe.xclient);
-            break;
+        break;
         }
     } while (!stop);
 

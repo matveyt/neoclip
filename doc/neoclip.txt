@@ -1,4 +1,4 @@
-*neoclip.txt*           Neovim clipboard provider for MS Windows
+*neoclip.txt*	Neovim clipboard provider for MS Windows
 
 ==============================================================================
 OVERVIEW                                                             *neoclip*
@@ -15,10 +15,19 @@ C source code is available under `src/` subdirectory. You'll need Lua5.1 (or
 LuaJIT) development package to compile it.
 
 ==============================================================================
-VARIABLES                                                  *neoclip-variables*
+VARIABLES
 
 g:neoclip_channel                                          *g:neoclip_channel*
     This is Neovim |UI| |channel-id|. Normally it's 1 for GUI and 0 (unused)
-    for TUI.
+    for TUI. Note you may want to set it directly inside your |vimrc| (before
+    plugins are loaded). Otherwise, it's better to change it via |:Neoclip|
+
+==============================================================================
+COMMANDS
+
+:[N]Neoclip                                                         *:Neoclip*
+    Sets Neovim |UI| |channel-id| to use. Ensures that external module was
+    started (or stopped).
+
 ==============================================================================
  vim:tw=78:ts=8:noet:ft=help:norl:
