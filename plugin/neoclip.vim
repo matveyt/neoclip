@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Aug 12
+" Last Change:  2020 Aug 13
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -51,12 +51,10 @@ function s:reset_module() abort
     if vim.g.neoclip_channel <= 0 then
         -- load C module
         if vim.fn.has("win32") == 1 then
-            require "neoclip_w32"
+            neoclip = require"neoclip_w32"
         elseif vim.fn.has("unix") == 1 then
-            require "neoclip_x11"
-        end
-        -- check if success
-        if neoclip == nil then
+            neoclip = require"neoclip_x11"
+        else
             vim.api.nvim_command "throw 'neoclip: Unsupported platform'"
         end
         -- try to start it up

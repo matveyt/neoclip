@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Jul 24
+ * Last Change:  2020 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -22,7 +22,8 @@ int luaopen_neoclip_w32(lua_State* L)
         { "set", neo_set },
         { NULL, NULL }
     };
-    luaL_register(L, "neoclip", methods);
+    lua_newtable(L);
+    luaL_register(L, NULL, methods);
     return 1;
 }
 
