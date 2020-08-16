@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Aug 13
+" Last Change:  2020 Aug 15
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -13,7 +13,7 @@ let s:save_cpo = &cpo
 set cpo&vim
 
 if !exists('g:neoclip_channel')
-    let g:neoclip_channel = nvim_list_uis()[-1].chan
+    let g:neoclip_channel = empty(nvim_list_uis()) ? 0 : nvim_list_uis()[-1].chan
 endif
 
 function s:get(regname) abort

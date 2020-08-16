@@ -1,12 +1,15 @@
-*neoclip.txt*	Neovim clipboard provider for MS Windows
+*neoclip.txt*	Neovim clipboard provider
 
 ==============================================================================
 OVERVIEW                                                             *neoclip*
 
-|Neoclip| is a clipboard provider for Neovim |provider-clipboard|.
+|Neoclip| is a clipboard provider for Neovim |provider-clipboard|. It provides
+access to OS clipboard without any need of external tools, such as win32yank,
+xclip or xsel.
 
-Under GUI |Neoclip| uses |msgpack-rpc| to access the system clipboard. Under
-TUI it needs an external platform-dependent Lua module to do the job.
+Under GUI |Neoclip| uses |msgpack-rpc| to forward query to the frontend
+application. Under TUI it needs an extra platform-dependent Lua module to
+do the job. Currently only Win32 and Xlib are supported.
 
 There's no special installation instructions. Just use |:checkhealth| to
 ensure that |Neoclip| is up and running.
@@ -18,16 +21,22 @@ LuaJIT) development package to compile it.
 VARIABLES
 
 g:neoclip_channel                                          *g:neoclip_channel*
-    This is Neovim |UI| |channel-id|. Normally it's 1 for GUI and 0 (unused)
-    for TUI. Note you may want to set it directly inside your |vimrc| (before
-    plugins are loaded). Otherwise, it's better to change it via |:Neoclip|
+
+    This is Neovim |UI| |channel-id|. Usually it's 1 for GUI and 0 for TUI. If
+    it's 0 then all the job is delegated to an external module. Otherwise,
+    |Neoclip| simply forwards |rpcrequest()| to that channel, so it'll be
+    processed by |UI| frontend application.
+
+    Note you may want to set it directly inside your |vimrc| (before plugins
+    are loaded). Otherwise, it's better to change it via |:Neoclip|
 
 ==============================================================================
 COMMANDS
 
-:[N]Neoclip                                                         *:Neoclip*
-    Sets Neovim |UI| |channel-id| to use. Ensures that external module was
-    started (or stopped).
+:[N]Neoclip [N]                                                     *:Neoclip*
+
+    Sets Neovim |UI| |channel-id| to use. Ensures that an external module was
+    started or stopped as appropriate.
 
 ==============================================================================
  vim:tw=78:ts=8:noet:ft=help:norl:
