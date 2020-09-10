@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 06
+ * Last Change:  2020 Sep 06
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -30,11 +30,10 @@ enum {
 void* neo_X_start(void);
 void neo_X_cleanup(void* X);
 
-void neo_X_join(void* X);
+int neo_X_lock(void* X, int lock);
 void neo_X_ready(void* X, int sel, const void* ptr, size_t cb);
 void neo_X_send(void* X, int message, int param);
-void neo_X_unlock(void* X);
-const void* neo_X_update(void* X, int sel, size_t* len);
+const void* neo_X_update(void* X, int sel, size_t* pcb);
 
 
 #endif // NEO_X_H

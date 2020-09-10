@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 11
+ * Last Change:  2020 Sep 10
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -73,10 +73,10 @@ void* neo_X_start(void)
 
 
 // destroy context
-// the thread must finish at this point
 void neo_X_cleanup(void* X)
 {
     neo_X* x = (neo_X*)X;
+    pthread_join(x->tid, NULL);
     pthread_mutex_destroy(&x->lock);
     pthread_cond_destroy(&x->c_rdy[0]);
     pthread_cond_destroy(&x->c_rdy[1]);
@@ -88,11 +88,11 @@ void neo_X_cleanup(void* X)
 }
 
 
-// pthread_join proxy
-void neo_X_join(void* X)
+// lock or unlock selection data
+int neo_X_lock(void* X, int lock)
 {
     neo_X* x = (neo_X*)X;
-    pthread_join(x->tid, NULL);
+    return lock ? pthread_mutex_lock(&x->lock) : pthread_mutex_unlock(&x->lock);
 }
 
 
@@ -100,10 +100,10 @@ void neo_X_join(void* X)
 // cb: 0 = empty buffer; SIZE_MAX = keep, signal only
 void neo_X_ready(void* X, int sel, const void* ptr, size_t cb)
 {
-    neo_X* x = (neo_X*)X;
-
-    if (!pthread_mutex_lock(&x->lock)) {
+    if (!neo_X_lock(X, 1)) {
+        neo_X* x = (neo_X*)X;
         int ix = (sel != prim) ? 1 : 0;
+
         // set new data
         if (cb != SIZE_MAX) {
             free(x->data[ix]);
@@ -118,7 +118,8 @@ void neo_X_ready(void* X, int sel, const void* ptr, size_t cb)
         // signal data is ready
         x->f_rdy[ix] = 1;
         pthread_cond_signal(&x->c_rdy[ix]);
-        pthread_mutex_unlock(&x->lock);
+
+        neo_X_lock(X, 0);
     }
 }
 
@@ -142,26 +143,18 @@ void neo_X_send(void* X, int message, int param)
 }
 
 
-// pthread_mutex_unlock proxy
-void neo_X_unlock(void* X)
-{
-    neo_X* x = (neo_X*)X;
-    pthread_mutex_unlock(&x->lock);
-}
-
-
 // update selection data from system
-// return NULL on error
+// Note: caller must unlock unless NULL is returned
 const void* neo_X_update(void* X, int sel, size_t* len)
 {
-    neo_X* x = (neo_X*)X;
-    int ix = (sel != prim) ? 1 : 0;
+    if (!neo_X_lock(X, 1)) {
+        neo_X* x = (neo_X*)X;
+        int ix = (sel != prim) ? 1 : 0;
 
-    // send request
-    x->f_rdy[ix] = 0;
-    neo_X_send(x, neo_update, sel);
+        // send request
+        x->f_rdy[ix] = 0;
+        neo_X_send(x, neo_update, sel);
 
-    if (!pthread_mutex_lock(&x->lock)) {
         // wait upto one second
         struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
@@ -169,13 +162,13 @@ const void* neo_X_update(void* X, int sel, size_t* len)
         {}  // nothing
 
         // success
-        if (x->f_rdy[ix]) {
+        if (x->f_rdy[ix] && x->cb[ix] > 0) {
             *len = x->cb[ix];
             return x->data[ix];
         }
 
-        // unlock on error
-        pthread_mutex_unlock(&x->lock);
+        // unlock on error or clipboard is empty
+        neo_X_lock(X, 0);
     }
 
     return NULL;
@@ -241,7 +234,7 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
     xse.property = xsre->property ? xsre->property : xsre->target;
     xse.time = xsre->time;
 
-    int err = pthread_mutex_lock(&x->lock);
+    int err = neo_X_lock(x, 1);
     if (!err) {
         if (xse.target == x->atom[targets]) {
             // TARGETS: UTF8_STRING
@@ -256,7 +249,7 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
             // unknown target
             err = 1;
         }
-        pthread_mutex_unlock(&x->lock);
+        neo_X_lock(x, 0);
     }
     if (err)
         xse.property = 0;

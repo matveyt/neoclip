@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 13
+ * Last Change:  2020 Sep 05
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -55,7 +55,6 @@ int neo_stop(lua_State* L)
 {
     if (X != NULL) {
         neo_X_send(X, proto, dele);
-        neo_X_join(X);
         neo_X_cleanup(X);
         X = NULL;
     }
@@ -88,7 +87,7 @@ int neo_get(lua_State* L)
             lua_pushlstring(L, line ? "V" : "v", sizeof(char));
             lua_rawseti(L, -2, 2);
             // unlock context
-            neo_X_unlock(X);
+            neo_X_lock(X, 0);
         }
     }
 
