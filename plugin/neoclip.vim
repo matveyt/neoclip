@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Sep 06
+" Last Change:  2020 Sep 29
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -13,7 +13,7 @@ set cpo&vim
 
 " load Lua module
 lua<<
-    local function prequire(name)
+    local prequire = function(name)
         local ok, module = pcall(require, name)
         return ok and module or nil
     end
@@ -22,10 +22,10 @@ lua<<
     elseif vim.fn.has("mac") == 1 then
         neoclip = prequire("neoclip_mac")
     elseif vim.fn.has("unix") == 1 then
-        neoclip = os.getenv("XDG_SESSION_TYPE") == "wayland" and
+        neoclip = os.getenv("WAYLAND_DISPLAY") and
             prequire("neoclip_wl") or prequire("neoclip_x11")
     end
-    vim.g.loaded_neoclip = neoclip and (not neoclip.start or neoclip.start())
+    vim.g.loaded_neoclip = neoclip and (not neoclip.start or neoclip.start()) or false
 .
 
 if g:loaded_neoclip
