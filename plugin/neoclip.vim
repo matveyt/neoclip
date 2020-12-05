@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Sep 29
+" Last Change:  2020 Nov 17
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -29,13 +29,12 @@ lua<<
 .
 
 if g:loaded_neoclip
-    function s:get(regname) abort
-        return luaeval('neoclip.get(_A)', a:regname)
+    function s:get(...) abort
+        return luaeval('neoclip.get(_A[1])', a:000)
     endfunction
 
-    function s:set(regname, lines, regtype) abort
-        call luaeval('neoclip.set(_A[1], _A[2], _A[3])',
-            \ [a:regname, a:lines, a:regtype])
+    function s:set(...) abort
+        call luaeval('neoclip.set(_A[1], _A[2], _A[3])', a:000)
     endfunction
 
     let g:clipboard = {
