@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Mar 09
+ * Last Change:  2021 Mar 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -11,7 +11,7 @@
 
 
 // module registration for Lua 5.1
-__declspec(dllexport)
+__attribute__((visibility("default")))
 int luaopen_neoclip_mac(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
