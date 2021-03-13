@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Aug 13
+ * Last Change:  2021 Mar 09
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -18,6 +18,9 @@ __declspec(dllexport)
 int luaopen_neoclip_w32(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
+        { "id", neo_id },
+        { "start", neo_start },
+        { "stop", neo_stop },
         { "get", neo_get },
         { "set", neo_set },
         { NULL, NULL }
@@ -25,6 +28,30 @@ int luaopen_neoclip_w32(lua_State* L)
     lua_newtable(L);
     luaL_register(L, NULL, methods);
     return 1;
+}
+
+
+// module ID
+int neo_id(lua_State* L)
+{
+    lua_pushliteral(L, "neoclip/WinAPI");
+    return 1;
+}
+
+
+// no-op
+int neo_start(lua_State* L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+
+// no-op
+int neo_stop(lua_State* L)
+{
+    (void)L;    // unused
+    return 0;
 }
 
 

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Sep 05
+ * Last Change:  2021 Mar 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -19,6 +19,7 @@ __attribute__((visibility("default")))
 int luaopen_neoclip_x11(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
+        { "id", neo_id },
         { "start", neo_start },
         { "stop", neo_stop },
         { "get", neo_get },
@@ -36,6 +37,14 @@ __attribute__((destructor))
 void luaclose_neoclip_x11(void)
 {
     neo_stop(NULL);
+}
+
+
+// module ID
+int neo_id(lua_State* L)
+{
+    lua_pushliteral(L, "neoclip/Xlib");
+    return 1;
 }
 
 

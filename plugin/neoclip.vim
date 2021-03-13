@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2020 Nov 17
+" Last Change:  2021 Mar 09
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -25,7 +25,7 @@ lua<<
         neoclip = os.getenv("WAYLAND_DISPLAY") and
             prequire("neoclip_wl") or prequire("neoclip_x11")
     end
-    vim.g.loaded_neoclip = neoclip and (not neoclip.start or neoclip.start()) or false
+    vim.g.loaded_neoclip = neoclip and neoclip.start() or false
 .
 
 if g:loaded_neoclip
@@ -38,7 +38,7 @@ if g:loaded_neoclip
     endfunction
 
     let g:clipboard = {
-        \   'name': 'neoclip',
+        \   'name': luaeval('neoclip.id()'),
         \   'paste': {
         \       '+': function('s:get', ['+']),
         \       '*': function('s:get', ['*']),
