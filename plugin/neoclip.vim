@@ -1,6 +1,6 @@
 " Neovim clipboard provider
 " Maintainer:   matveyt
-" Last Change:  2021 Mar 09
+" Last Change:  2021 Apr 09
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -11,7 +11,6 @@ endif
 let s:save_cpo = &cpo
 set cpo&vim
 
-" load Lua module
 lua<<
     local prequire = function(name)
         local ok, module = pcall(require, name)
@@ -26,31 +25,36 @@ lua<<
             prequire("neoclip_wl") or prequire("neoclip_x11")
     end
     vim.g.loaded_neoclip = neoclip and neoclip.start() or false
+    if vim.g.loaded_neoclip then
+        neoclip.partial = function(action, reg)
+            return function(...)
+                return neoclip[action](reg, ...)
+            end
+        end
+    end
 .
 
-if g:loaded_neoclip
-    function s:get(...) abort
-        return luaeval('neoclip.get(_A[1])', a:000)
-    endfunction
-
-    function s:set(...) abort
-        call luaeval('neoclip.set(_A[1], _A[2], _A[3])', a:000)
-    endfunction
-
-    let g:clipboard = {
-        \   'name': luaeval('neoclip.id()'),
-        \   'paste': {
-        \       '+': function('s:get', ['+']),
-        \       '*': function('s:get', ['*']),
-        \   },
-        \   'copy': {
-        \       '+': function('s:set', ['+']),
-        \       '*': function('s:set', ['*']),
-        \   },
-    \ }
-else
-    echomsg 'neoclip: Unsupported platform'
-endif
+let g:clipboard = g:loaded_neoclip ? {
+    \ 'name': luaeval('neoclip.id()'),
+    \ 'paste': {
+    \   '+': luaeval('neoclip.partial("get", "+")'),
+    \   '*': luaeval('neoclip.partial("get", "*")'),
+    \ },
+    \ 'copy': {
+    \   '+': luaeval('neoclip.partial("set", "+")'),
+    \   '*': luaeval('neoclip.partial("set", "*")'),
+    \ },
+\ } : {
+    \ 'name': 'neoclip/Void',
+    \ 'paste': {
+    \   '+': {-> []},
+    \   '*': {-> []},
+    \ },
+    \ 'copy': {
+    \   '+': {-> v:true},
+    \   '*': {-> v:true},
+    \ },
+\ }
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
