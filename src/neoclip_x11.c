@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Mar 13
+ * Last Change:  2021 May 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -43,7 +43,7 @@ void luaclose_neoclip_x11(void)
 // module ID
 int neo_id(lua_State* L)
 {
-    lua_pushliteral(L, "neoclip/Xlib");
+    lua_pushliteral(L, "neoclip/X11");
     return 1;
 }
 
@@ -80,27 +80,22 @@ int neo_get(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     int sel = *lua_tostring(L, 1) != '*' ? clip : prim;
 
-    // a table to return
+    // table to return
     lua_newtable(L);
 
     // query selection data
     if (X != NULL) {
         size_t cb;
-        const void* buf = neo_X_update(X, sel, &cb);
+        int type;
+        const void* buf = neo_X_update(X, sel, &cb, &type);
 
         if (buf != NULL) {
-            // split lines
-            int line = neo_split(L, buf, cb);
-            lua_rawseti(L, -2, 1);
-            // push regtype
-            lua_pushlstring(L, line ? "V" : "v", sizeof(char));
-            lua_rawseti(L, -2, 2);
-            // unlock context
+            neo_split(L, lua_gettop(L), buf, cb, type);
             neo_X_lock(X, 0);
         }
     }
 
-    // always return a table (empty on error)
+    // always return table (empty on error)
     return 1;
 }
 
@@ -111,21 +106,20 @@ int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
-    luaL_checktype(L, 3, LUA_TSTRING);  // regtype (unused)
+    luaL_checktype(L, 3, LUA_TSTRING);  // regtype
     int sel = *lua_tostring(L, 1) != '*' ? clip : prim;
+    int type = neo_type(*lua_tostring(L, 3));
 
     // change selection data
     if (X != NULL) {
-        // convert to string
-        lua_pushvalue(L, 2);
-        neo_join(L, "\n");
+        neo_join(L, 2, "\n");
 
         // get user data
         size_t cb;
         const char* ptr = lua_tolstring(L, -1, &cb);
 
         // owned
-        neo_X_ready(X, sel, ptr, cb);
+        neo_X_ready(X, sel, ptr, cb, type);
         neo_X_send(X, neo_owned, sel);
 
         lua_pop(L, 1);

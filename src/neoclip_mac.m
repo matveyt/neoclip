@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Mar 13
+ * Last Change:  2021 May 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -8,6 +8,10 @@
 
 #include "neoclip.h"
 #import <AppKit/AppKit.h>
+
+
+// Vim compatible format
+static NSString* VimPboardType = @"VimPboardType";
 
 
 // module registration for Lua 5.1
@@ -58,26 +62,38 @@ int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
 
-    // a table to return
+    // table to return
     lua_newtable(L);
 
-    // read NSString from generalPasteboard
+    // check supported types
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
-    NSString* str = [pb stringForType:NSPasteboardTypeString];
+    NSString* bestType = [pb availableTypeFromArray:[NSArray
+        arrayWithObjects:VimPboardType, NSPasteboardTypeString, nil]];
 
-    // convert NSString to UTF-8
-    NSData* buf = [str dataUsingEncoding:NSUTF8StringEncoding];
+    if (bestType) {
+        NSString* str = nil;
+        int type = 255;
 
-    if (buf.length > 0) {
-        // split lines
-        int line = neo_split(L, buf.bytes, buf.length);
-        lua_rawseti(L, -2, 1);
-        // push regtype
-        lua_pushlstring(L, line ? "V" : "v", sizeof(char));
-        lua_rawseti(L, -2, 2);
+        // [NSArray arrayWithObjects:[NSNumber], [NSString]]
+        if ([bestType isEqual:VimPboardType]) {
+            id plist = [pb propertyListForType:VimPboardType];
+            if ([plist isKindOfClass:[NSArray class]] && [plist count] == 2) {
+                type = [[plist objectAtIndex:0] intValue];
+                str = [plist objectAtIndex:1];
+            }
+        }
+
+        // otherwise try NSPasteboardTypeString
+        if (!str)
+            str = [pb stringForType:NSPasteboardTypeString];
+
+        // convert to UTF-8 and split into table
+        NSData* buf = [str dataUsingEncoding:NSUTF8StringEncoding];
+        if (buf.length > 0)
+            neo_split(L, lua_gettop(L), buf.bytes, buf.length, type);
     }
 
-    // always return a table (empty on error)
+    // always return table (empty on error)
     return 1;
 }
 
@@ -88,11 +104,11 @@ int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
-    luaL_checktype(L, 3, LUA_TSTRING);  // regtype (unused)
+    luaL_checktype(L, 3, LUA_TSTRING);  // regtype
+    int type = neo_type(*lua_tostring(L, 3));
 
-    // convert to string
-    lua_pushvalue(L, 2);
-    neo_join(L, "\n");
+    // table to string
+    neo_join(L, 2, "\n");
 
     // get UTF-8
     size_t cb;
@@ -102,15 +118,18 @@ int neo_set(lua_State* L)
     NSString* str = [[NSString alloc] initWithBytes:ptr length:cb
         encoding:NSUTF8StringEncoding];
 
-    // write NSString to generalPasteboard
+    // set VimPboardType and NSPasteboardTypeString
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
-    [pb declareTypes:[NSArray arrayWithObject:NSPasteboardTypeString] owner:nil];
-    BOOL ok = [pb setString:str forType:NSPasteboardTypeString];
+    [pb declareTypes:[NSArray arrayWithObjects:VimPboardType, NSPasteboardTypeString,
+        nil] owner:nil];
+    [pb setPropertyList:[NSArray arrayWithObjects:[NSNumber numberWithInt:type], str,
+        nil] forType:VimPboardType];
+    [pb setString:str forType:NSPasteboardTypeString];
 
     // cleanup
     [str release];
     lua_pop(L, 1);
 
-    lua_pushboolean(L, ok);
+    lua_pushboolean(L, 1);
     return 1;
 }

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2020 Sep 10
+ * Last Change:  2021 May 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 
 // context structure
@@ -20,10 +21,10 @@ typedef struct {
     Display* d;                 // X Display
     Window w;                   // X Window
     Atom atom[total];           // X Atoms
-    void* data[2];              // Selection data
-    size_t cb[2];               // Selection size
-    pthread_cond_t c_rdy[2];    // Selection "ready" condition
-    int f_rdy[2];               // Selection "ready" flag
+    unsigned char* data[2];     // Selection: _VIMENC_TEXT
+    size_t cb[2];               // Selection: text size only
+    pthread_cond_t c_rdy[2];    // Selection: "ready" condition
+    int f_rdy[2];               // Selection: "ready" flag
     pthread_mutex_t lock;       // Mutex lock
     pthread_t tid;              // Thread ID
 } neo_X;
@@ -34,6 +35,8 @@ static void* thread_main(void* X);
 static void on_sel_notify(neo_X* x, XSelectionEvent* xse);
 static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre);
 static int on_client_message(neo_X* x, XClientMessageEvent* xcme);
+static Atom best_target(neo_X* x, Atom* atom, int count);
+static void set_property(neo_X* x, int ix_sel, Window w, Atom property, Atom* type);
 
 
 // init context and start thread
@@ -46,15 +49,21 @@ void* neo_X_start(void)
         return NULL;
 
     // atom names
-    static char* names[] = {
+    static /*const*/ char* names[] = {
         [prim] = "PRIMARY",
         [clip] = "CLIPBOARD",
-        [targets] = "TARGETS",
-        [utf8] = "UTF8_STRING",
+        [atom] = "ATOM",
         [proto] = "WM_PROTOCOLS",
         [dele] = "WM_DELETE_WINDOW",
         [neo_update] = "NEO_UPDATE",
-        [neo_owned] = "NEO_OWNED"
+        [neo_owned] = "NEO_OWNED",
+        [targets] = "TARGETS",
+        [vimenc] = "_VIMENC_TEXT",
+        [vimtext] = "_VIM_TEXT",
+        [utf8] = "UTF8_STRING",
+        [compound] = "COMPOUND_TEXT",
+        [string] = "STRING",
+        [text] = "TEXT"
     };
 
     // context
@@ -96,9 +105,9 @@ int neo_X_lock(void* X, int lock)
 }
 
 
-// change selection buffer contents
-// cb: 0 = empty buffer; SIZE_MAX = keep, signal only
-void neo_X_ready(void* X, int sel, const void* ptr, size_t cb)
+// signal selection buffer contents changed
+// cb: 0 = empty buffer; SIZE_MAX = keep old, signal only
+void neo_X_ready(void* X, int sel, const void* ptr, size_t cb, int type)
 {
     if (!neo_X_lock(X, 1)) {
         neo_X* x = (neo_X*)X;
@@ -108,7 +117,11 @@ void neo_X_ready(void* X, int sel, const void* ptr, size_t cb)
         if (cb != SIZE_MAX) {
             free(x->data[ix]);
             if (cb) {
-                x->data[ix] = memcpy(malloc(cb), ptr, cb);
+                // _VIMENC_TEXT: motion 'encoding' NUL text
+                x->data[ix] = malloc(1 + sizeof("utf-8") + cb);
+                x->data[ix][0] = type;
+                memcpy(x->data[ix] + 1, "utf-8", sizeof("utf-8"));
+                memcpy(x->data[ix] + 1 + sizeof("utf-8"), ptr, cb);
                 x->cb[ix] = cb;
             } else {
                 x->data[ix] = NULL;
@@ -124,7 +137,7 @@ void neo_X_ready(void* X, int sel, const void* ptr, size_t cb)
 }
 
 
-// send ClientMessage to the thread
+// send ClientMessage to our thread
 void neo_X_send(void* X, int message, int param)
 {
     neo_X* x = (neo_X*)X;
@@ -145,7 +158,7 @@ void neo_X_send(void* X, int message, int param)
 
 // update selection data from system
 // Note: caller must unlock unless NULL is returned
-const void* neo_X_update(void* X, int sel, size_t* len)
+const void* neo_X_update(void* X, int sel, size_t* pcb, int* ptype)
 {
     if (!neo_X_lock(X, 1)) {
         neo_X* x = (neo_X*)X;
@@ -155,7 +168,7 @@ const void* neo_X_update(void* X, int sel, size_t* len)
         x->f_rdy[ix] = 0;
         neo_X_send(x, neo_update, sel);
 
-        // wait upto one second
+        // wait upto 1 second
         struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
         while (!x->f_rdy[ix] && !pthread_cond_timedwait(&x->c_rdy[ix], &x->lock, &t))
@@ -163,8 +176,9 @@ const void* neo_X_update(void* X, int sel, size_t* len)
 
         // success
         if (x->f_rdy[ix] && x->cb[ix] > 0) {
-            *len = x->cb[ix];
-            return x->data[ix];
+            *pcb = x->cb[ix];
+            *ptype = x->data[ix][0];
+            return (x->data[ix] + 1 + sizeof("utf-8"));
         }
 
         // unlock on error or clipboard is empty
@@ -204,20 +218,72 @@ static void* thread_main(void* X)
 // SelectionNotify event handler
 static void on_sel_notify(neo_X* x, XSelectionEvent* xse)
 {
-    if (xse->property) {
-        // read property
-        unsigned char* ptr = NULL;
+    int sel = (xse->selection != x->atom[prim]) ? clip : prim;
+
+    if (xse->property == x->atom[neo_update]) {
+        // read our property
+        Atom type = None;
+        unsigned char* xptr = NULL;
         unsigned long cb = 0;
-        XGetWindowProperty(x->d, x->w, xse->property, 0, LONG_MAX, 1, x->atom[utf8],
-            &(Atom){0}, &(int){0}, &cb, &(unsigned long){0}, &ptr);
+        XGetWindowProperty(x->d, x->w, x->atom[neo_update], 0, LONG_MAX, True,
+            AnyPropertyType, &type, &(int){0}, &cb, &(unsigned long){0}, &xptr);
 
-        // signal new selection
-        int sel = (xse->selection != x->atom[prim]) ? clip : prim;
-        neo_X_ready(x, sel, ptr, (size_t)cb);
+        do {
+            if (type == x->atom[atom] || type == x->atom[targets]) {
+                // TARGETS list
+                Atom target = best_target(x, (Atom*)xptr, (int)cb);
+                if (target != None) {
+                    XConvertSelection(x->d, xse->selection, target, x->atom[neo_update],
+                        x->w, CurrentTime);
+                    break;
+                }
+            } else if (type == x->atom[vimenc]) {
+                // _VIMENC_TEXT
+                if (cb >= 1 + sizeof("utf-8")
+                    && !memcmp(xptr + 1, "utf-8", sizeof("utf-8"))) {
+                    // this is UTF-8, hurray!
+                    neo_X_ready(x, sel, xptr + 1 + sizeof("utf-8"),
+                        (size_t)cb - 1 - sizeof("utf-8"), xptr[0]);
+                } else {
+                    // no UTF-8, sigh... let's try COMPOUND_TEXT then for safety
+                    XConvertSelection(x->d, xse->selection, x->atom[compound],
+                        x->atom[neo_update], x->w, CurrentTime);
+                }
+                break;
+            } else if (type == x->atom[vimtext]) {
+                // _VIM_TEXT: assume UTF-8
+                neo_X_ready(x, sel, xptr + 1, (size_t)cb - 1, xptr[0]);
+                break;
+            } else if (type == x->atom[utf8]) {
+                // UTF8_STRING
+                neo_X_ready(x, sel, xptr, (size_t)cb, 255);
+                break;
+            } else if (type == x->atom[compound] || type == x->atom[string]
+                || type == x->atom[text]) {
+                // COMPOUND_TEXT, STRING or TEXT: attempt to convert to UTF-8
+                XTextProperty xtp = {
+                    .value = xptr,
+                    .encoding = type,
+                    .format = 8,
+                    .nitems = cb
+                };
+                char** list;
+                if (Xutf8TextPropertyToTextList(x->d, &xtp, &list, &(int){0})
+                    == Success) {
+                    neo_X_ready(x, sel, list[0], strlen(list[0]), 255);
+                    XFreeStringList(list);
+                    break;
+                }
+            }
+            // failed to convert
+            neo_X_ready(x, sel, NULL, 0, 0);
+        } while (0);
 
-        // free Xlib memory
-        if (ptr)
-            XFree(ptr);
+        if (xptr != NULL)
+            XFree(xptr);
+    } else if (xse->property == None) {
+        // peer error
+        neo_X_ready(x, sel, NULL, 0, 0);
     }
 }
 
@@ -225,7 +291,7 @@ static void on_sel_notify(neo_X* x, XSelectionEvent* xse)
 // SelectionRequest event handler
 static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
 {
-    // prepare SelectionNotify event
+    // prepare SelectionNotify
     XSelectionEvent xse;
     xse.type = SelectionNotify;
     xse.requestor = xsre->requestor;
@@ -234,25 +300,25 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
     xse.property = xsre->property ? xsre->property : xsre->target;
     xse.time = xsre->time;
 
-    int err = neo_X_lock(x, 1);
-    if (!err) {
+    if (!neo_X_lock(x, 1)) {
+        // TARGETS: _VIMENC_TEXT, _VIM_TEXT, UTF8_STRING, COMPOUND_TEXT, STRING, TEXT
         if (xse.target == x->atom[targets]) {
-            // TARGETS: UTF8_STRING
+            // response type is ATOM
+            xse.target = x->atom[atom];
             XChangeProperty(x->d, xse.requestor, xse.property, xse.target, 32,
-                PropModeReplace, (unsigned char*)&x->atom[utf8], 1);
-        } else if (xse.target == x->atom[utf8]) {
-            // UTF8_STRING: data[ix_sel]
-            int ix_sel = (xse.selection != x->atom[prim]) ? 1 : 0;
-            XChangeProperty(x->d, xse.requestor, xse.property, xse.target, 8,
-                PropModeReplace, (unsigned char*)x->data[ix_sel], (int)x->cb[ix_sel]);
+                PropModeReplace, (unsigned char*)&x->atom[targets], total - targets);
+        } else if (best_target(x, &xse.target, 1) != None) {
+            // type may change due to conversion
+            set_property(x, xse.selection != x->atom[prim] ? 1 : 0, xse.requestor,
+                xse.property, &xse.target);
         } else {
-            // unknown target
-            err = 1;
+            // target is unknown
+            xse.property = None;
         }
         neo_X_lock(x, 0);
+    } else {
+        xse.property = None;
     }
-    if (err)
-        xse.property = 0;
 
     // send SelectionNotify
     XSendEvent(x->d, xse.requestor, 1, 0, (XEvent*)&xse);
@@ -265,17 +331,17 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
     Atom param = (Atom)xcme->data.l[0];
 
     if (xcme->message_type == x->atom[neo_update]) {        // NEO_UPDATE
-        // sync our selection data with the system's
+        // sync our selection data to system
         Window owner = XGetSelectionOwner(x->d, param);
         if (owner == 0 || owner == x->w) {
-            // no need to convert
-            int sel = (param != x->atom[prim]) ? clip : prim;
-            neo_X_ready(x, sel, NULL, owner ? SIZE_MAX : 0);
+            // no conversion needed
+            neo_X_ready(x, param != x->atom[prim] ? clip : prim, NULL,
+                owner ? SIZE_MAX : 0, 0);
         } else {
-            // initiate conversion from another window
-            // the data will be ready upon SelectionNotify
-            XConvertSelection(x->d, param, x->atom[utf8], x->atom[neo_update], x->w,
-                CurrentTime);
+            // what are supported TARGETS?
+            // we'll get answer by SelectionNotify
+            XConvertSelection(x->d, param, x->atom[targets], x->atom[neo_update],
+                x->w, CurrentTime);
         }
     } else if (xcme->message_type == x->atom[neo_owned]) {  // NEO_OWNED
         // become selection owner
@@ -285,4 +351,72 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
     }
 
     return 0;
+}
+
+
+// best matching target atom
+static Atom best_target(neo_X* x, Atom* atom, int count)
+{
+    int best = total;
+
+    for (int i = 0; i < count && best > targets + 1; ++i)
+        for (int j = targets + 1; j < best; ++j)
+            if (atom[i] == x->atom[j]) {
+                best = j;
+                break;
+            }
+
+    return best < total ? x->atom[best] : None;
+}
+
+
+// set window property
+static void set_property(neo_X* x, int ix_sel, Window w, Atom property, Atom* type)
+{
+    XTextProperty xtp = {
+        .value = x->data[ix_sel],
+        .encoding = *type,
+        .format = 8,
+        .nitems = x->cb[ix_sel]
+    };
+    unsigned char* ptr = NULL;
+    unsigned char* xptr = NULL;
+
+    if (xtp.encoding == x->atom[vimenc]) {
+        // _VIMENC_TEXT: motion 'encoding' NUL text
+        xtp.nitems += 1 + sizeof("utf-8");
+    } else if (xtp.encoding == x->atom[vimtext]) {
+        // _VIM_TEXT: motion text
+        ptr = malloc(1 + xtp.nitems);
+        ptr[0] = xtp.value[0];
+        memcpy(ptr + 1, xtp.value + 1 + sizeof("utf-8"), xtp.nitems);
+        xtp.value = ptr;
+        xtp.nitems++;
+    } else {
+        // skip header
+        xtp.value += 1 + sizeof("utf-8");
+        // Vim-alike behaviour: STRING -> UTF8_STRING, TEXT -> COMPOUND_TEXT
+        if (xtp.encoding == x->atom[string])
+            xtp.encoding = x->atom[utf8];
+        else if (xtp.encoding == x->atom[text])
+            xtp.encoding = x->atom[compound];
+    }
+
+    if (xtp.encoding == x->atom[compound]) {
+        // convert UTF-8 to COMPOUND_TEXT
+        ptr = memcpy(malloc(xtp.nitems + 1), xtp.value, xtp.nitems);
+        ptr[xtp.nitems] = 0;
+        Xutf8TextListToTextProperty(x->d, (char**)&ptr, 1, XCompoundTextStyle, &xtp);
+        xptr = xtp.value;
+    }
+
+    // set property
+    XChangeProperty(x->d, w, property, xtp.encoding, xtp.format, PropModeReplace,
+        xtp.value, (int)xtp.nitems);
+    *type = xtp.encoding;
+
+    // free memory
+    free(ptr);
+    if (xptr != NULL)
+        XFree(xptr);
 }
