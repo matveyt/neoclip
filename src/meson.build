@@ -1,6 +1,6 @@
 project('neoclip', 'c', license : 'Unlicense', default_options :
   ['b_ndebug=if-release', 'buildtype=release', 'c_std=c99', 'default_library=shared',
-    'install_umask=0177', 'strip=true', 'warning_level=3', 'werror=true'])
+    'install_umask=0177', 'warning_level=3', 'werror=true'])
 
 install_dir = meson.source_root() / '../lua'
 lua = dependency('luajit')
@@ -32,13 +32,13 @@ else # *nix
     xdg_datadir = wl_protocols.get_variable(pkgconfig : 'pkgdatadir')
     xdg_shell_xml = xdg_datadir / 'stable/xdg-shell/xdg-shell.xml'
     xdg_shell_h = custom_target('xdg-shell-h',
-      input : xdg_shell_xml, output : 'xdg-shell-client-protocol.h',
+      input : xdg_shell_xml, output : 'wayland-xdg-shell-client-protocol.h',
       command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
     xdg_shell_c = custom_target('xdg-shell-c',
-      input : xdg_shell_xml, output : 'xdg-shell-protocol.c',
+      input : xdg_shell_xml, output : 'wayland-xdg-shell-protocol.c',
       command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
     sources2 = [neoclip2 + '.c', 'neo_w.c', 'neo_common.c', xdg_shell_h, xdg_shell_c]
-    deps2 = [lua, wl_client, threads, meson.get_compiler('c').find_library('rt')]
+    deps2 = [lua, wl_client, meson.get_compiler('c').find_library('rt'), threads]
   endif
 endif
 

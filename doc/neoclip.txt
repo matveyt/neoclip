@@ -3,12 +3,12 @@
 ==============================================================================
 OVERVIEW                                                             *neoclip*
 
-|Neoclip| is a clipboard provider for Neovim |provider-clipboard|. It provides
-access to OS clipboard without any need of external tools, such as `win32yank`,
-`xclip`, `xsel`, `pbcopy`, `pbpaste` and so on.
+|Neoclip| is a clipboard provider for Neovim |provider-clipboard|. It allows
+to access system clipboard without any additional tools, such as `win32yank`,
+`xclip`, `xsel`, `pbcopy`, `pbpaste` etc.
 
-Currently supported platforms are Windows, macOS and X. You'll need Meson and
-LuaJIT to compile platform-dependent module from source. For example, >
+Currently supported platforms are Windows, macOS and X. You have to compile
+platform-dependent module from source before use. For example,
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
     $ meson build && ninja -C build install
