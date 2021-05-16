@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 May 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -129,6 +129,7 @@ int neo_get(lua_State* L)
     } while (0);
 
     if (hData != NULL) {
+        // note: pBuf may contain trailing NUL but neo_split() will take care of it
         neo_split(L, lua_gettop(L), pBuf, count, meta[0]);
         GlobalUnlock(hData);
         if (hBuf != NULL) {
@@ -178,9 +179,9 @@ int neo_set(lua_State* L)
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof(int) * 4);
         int* pMeta = GlobalLock(hBuf);
         *pMeta++ = neo_type(*lua_tostring(L, 3));   // type
-        *pMeta++ = cchACP ? cchACP - 1 : 0;         // txtlen
-        *pMeta++ = cchUCS ? cchUCS - 1 : 0;         // ucslen
-        *pMeta   = sizeof("utf-8") + cchSrc - 1;    // rawlen
+        *pMeta++ = cchACP ? cchACP - 1 : 0;         // ACP len
+        *pMeta++ = cchUCS ? cchUCS - 1 : 0;         // UCS len
+        *pMeta   = sizeof("utf-8") + cchSrc - 1;    // Raw len
         unlock_and_set(g_uVimMeta, hBuf);
 
         lua_pop(L, 1);

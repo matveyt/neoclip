@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 May 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -51,12 +51,11 @@ void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
     lua_newtable(L);
 
     do {
-        // get next octet
-        int c = pb[off];
+        int c = pb[off];        // get next octet
 
-        if (state > 0) {// skip continuation octets
+        if (state > 0) {        // skip continuation octet(s)
             if (c < 0x80 || c >= 0xc0)
-                break;  // not a continuation octet
+                break;          // non-continuation octet
             --state;
         } else if (c == 0) {    // NUL
             break;
@@ -67,7 +66,7 @@ void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
             // adjust pb and off
             pb += off + 1;
             off = state = 0;
-            continue;
+            continue;           // don't increment off
         } else if (c == 13) {   // have CR
             state = -1;
         } else if (c < 0x80) {  // 7 bits code
@@ -86,7 +85,7 @@ void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
         ++off;
     } while (--rest);
 
-    // push last string (chop invalid rest)
+    // push last string w/o invalid rest
     lua_pushlstring(L, (const char*)pb, off/* + rest*/);
     lua_rawseti(L, -2, i);
 
@@ -98,7 +97,7 @@ void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
 }
 
 
-// table concatenation
+// table concatenation (numeric indices only)
 // return string on Lua stack
 void neo_join(lua_State* L, int idx, const char* sep)
 {

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 May 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -36,7 +36,7 @@ static void on_sel_notify(neo_X* x, XSelectionEvent* xse);
 static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre);
 static int on_client_message(neo_X* x, XClientMessageEvent* xcme);
 static Atom best_target(neo_X* x, Atom* atom, int count);
-static void set_property(neo_X* x, int ix_sel, Window w, Atom property, Atom* type);
+static void set_property(neo_X* x, int sel, Window w, Atom property, Atom* type);
 
 
 // init context and start thread
@@ -49,7 +49,7 @@ void* neo_X_start(void)
         return NULL;
 
     // atom names
-    static /*const*/ char* names[] = {
+    static /*const*/ char* atom_name[total] = {
         [prim] = "PRIMARY",
         [clip] = "CLIPBOARD",
         [atom] = "ATOM",
@@ -70,7 +70,7 @@ void* neo_X_start(void)
     neo_X* x = calloc(1, sizeof(neo_X));
     x->d = d;
     x->w = XCreateSimpleWindow(d, DefaultRootWindow(d), 0, 0, 1, 1, 0, 0, 0);
-    XInternAtoms(d, names, sizeof(names) / sizeof(names[0]), 0, x->atom);
+    XInternAtoms(d, atom_name, total, 0, x->atom);
     XSetWMProtocols(d, x->w, &x->atom[dele], 1);
     pthread_cond_init(&x->c_rdy[0], NULL);
     pthread_cond_init(&x->c_rdy[1], NULL);
@@ -111,26 +111,26 @@ void neo_X_ready(void* X, int sel, const void* ptr, size_t cb, int type)
 {
     if (!neo_X_lock(X, 1)) {
         neo_X* x = (neo_X*)X;
-        int ix = (sel != prim) ? 1 : 0;
+        int ix_sel = (sel == prim) ? 0 : 1;
 
         // set new data
         if (cb != SIZE_MAX) {
-            free(x->data[ix]);
+            free(x->data[ix_sel]);
             if (cb) {
                 // _VIMENC_TEXT: motion 'encoding' NUL text
-                x->data[ix] = malloc(1 + sizeof("utf-8") + cb);
-                x->data[ix][0] = type;
-                memcpy(x->data[ix] + 1, "utf-8", sizeof("utf-8"));
-                memcpy(x->data[ix] + 1 + sizeof("utf-8"), ptr, cb);
-                x->cb[ix] = cb;
+                x->data[ix_sel] = malloc(1 + sizeof("utf-8") + cb);
+                x->data[ix_sel][0] = type;
+                memcpy(x->data[ix_sel] + 1, "utf-8", sizeof("utf-8"));
+                memcpy(x->data[ix_sel] + 1 + sizeof("utf-8"), ptr, cb);
+                x->cb[ix_sel] = cb;
             } else {
-                x->data[ix] = NULL;
-                x->cb[ix] = 0;
+                x->data[ix_sel] = NULL;
+                x->cb[ix_sel] = 0;
             }
         }
         // signal data is ready
-        x->f_rdy[ix] = 1;
-        pthread_cond_signal(&x->c_rdy[ix]);
+        x->f_rdy[ix_sel] = 1;
+        pthread_cond_signal(&x->c_rdy[ix_sel]);
 
         neo_X_lock(X, 0);
     }
@@ -157,28 +157,29 @@ void neo_X_send(void* X, int message, int param)
 
 
 // update selection data from system
-// Note: caller must unlock unless NULL is returned
+// note: caller must unlock unless NULL is returned
 const void* neo_X_update(void* X, int sel, size_t* pcb, int* ptype)
 {
     if (!neo_X_lock(X, 1)) {
         neo_X* x = (neo_X*)X;
-        int ix = (sel != prim) ? 1 : 0;
+        int ix_sel = (sel == prim) ? 0 : 1;
 
         // send request
-        x->f_rdy[ix] = 0;
+        x->f_rdy[ix_sel] = 0;
         neo_X_send(x, neo_update, sel);
 
         // wait upto 1 second
         struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
-        while (!x->f_rdy[ix] && !pthread_cond_timedwait(&x->c_rdy[ix], &x->lock, &t))
-        {}  // nothing
+        while (!x->f_rdy[ix_sel]
+            && !pthread_cond_timedwait(&x->c_rdy[ix_sel], &x->lock, &t))
+            /*nothing*/;
 
         // success
-        if (x->f_rdy[ix] && x->cb[ix] > 0) {
-            *pcb = x->cb[ix];
-            *ptype = x->data[ix][0];
-            return (x->data[ix] + 1 + sizeof("utf-8"));
+        if (x->f_rdy[ix_sel] && x->cb[ix_sel] > 0) {
+            *pcb = x->cb[ix_sel];
+            *ptype = x->data[ix_sel][0];
+            return (x->data[ix_sel] + 1 + sizeof("utf-8"));
         }
 
         // unlock on error or clipboard is empty
@@ -194,7 +195,7 @@ static void* thread_main(void* X)
 {
     neo_X* x = (neo_X*)X;
 
-    int stop = 0;
+    int stop = False;
     do {
         XEvent xe;
         XNextEvent(x->d, &xe);
@@ -218,7 +219,7 @@ static void* thread_main(void* X)
 // SelectionNotify event handler
 static void on_sel_notify(neo_X* x, XSelectionEvent* xse)
 {
-    int sel = (xse->selection != x->atom[prim]) ? clip : prim;
+    int sel = (xse->selection == x->atom[prim]) ? prim : clip;
 
     if (xse->property == x->atom[neo_update]) {
         // read our property
@@ -245,7 +246,7 @@ static void on_sel_notify(neo_X* x, XSelectionEvent* xse)
                     neo_X_ready(x, sel, xptr + 1 + sizeof("utf-8"),
                         (size_t)cb - 1 - sizeof("utf-8"), xptr[0]);
                 } else {
-                    // no UTF-8, sigh... let's try COMPOUND_TEXT then for safety
+                    // no UTF-8, sigh... ask for COMPOUND_TEXT then
                     XConvertSelection(x->d, xse->selection, x->atom[compound],
                         x->atom[neo_update], x->w, CurrentTime);
                 }
@@ -309,8 +310,8 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
                 PropModeReplace, (unsigned char*)&x->atom[targets], total - targets);
         } else if (best_target(x, &xse.target, 1) != None) {
             // type may change due to conversion
-            set_property(x, xse.selection != x->atom[prim] ? 1 : 0, xse.requestor,
-                xse.property, &xse.target);
+            set_property(x, (xse.selection == x->atom[prim]) ? prim : clip,
+                xse.requestor, xse.property, &xse.target);
         } else {
             // target is unknown
             xse.property = None;
@@ -335,7 +336,7 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
         Window owner = XGetSelectionOwner(x->d, param);
         if (owner == 0 || owner == x->w) {
             // no conversion needed
-            neo_X_ready(x, param != x->atom[prim] ? clip : prim, NULL,
+            neo_X_ready(x, (param == x->atom[prim]) ? prim : clip, NULL,
                 owner ? SIZE_MAX : 0, 0);
         } else {
             // what are supported TARGETS?
@@ -347,10 +348,10 @@ static int on_client_message(neo_X* x, XClientMessageEvent* xcme)
         // become selection owner
         XSetSelectionOwner(x->d, param, x->w, CurrentTime);
     } else if (xcme->message_type == x->atom[proto]) {      // WM_DELETE_WINDOW
-        return (param == x->atom[dele]);
+        return (param == x->atom[dele]) ? True : False;
     }
 
-    return 0;
+    return False;
 }
 
 
@@ -371,13 +372,13 @@ static Atom best_target(neo_X* x, Atom* atom, int count)
 
 
 // set window property
-static void set_property(neo_X* x, int ix_sel, Window w, Atom property, Atom* type)
+static void set_property(neo_X* x, int sel, Window w, Atom property, Atom* type)
 {
     XTextProperty xtp = {
-        .value = x->data[ix_sel],
+        .value = x->data[(sel == prim) ? 0 : 1],
         .encoding = *type,
         .format = 8,
-        .nitems = x->cb[ix_sel]
+        .nitems = x->cb[(sel == prim) ? 0 : 1]
     };
     unsigned char* ptr = NULL;
     unsigned char* xptr = NULL;

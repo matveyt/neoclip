@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 May 15
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -72,9 +72,9 @@ int neo_get(lua_State* L)
 
     if (bestType) {
         NSString* str = nil;
-        int type = 255;
+        int type = 255; // MAUTO
 
-        // [NSArray arrayWithObjects:[NSNumber], [NSString]]
+        // VimPboardType is [NSArray arrayWithObjects:[NSNumber], [NSString]]
         if ([bestType isEqual:VimPboardType]) {
             id plist = [pb propertyListForType:VimPboardType];
             if ([plist isKindOfClass:[NSArray class]] && [plist count] == 2) {
@@ -83,7 +83,7 @@ int neo_get(lua_State* L)
             }
         }
 
-        // otherwise try NSPasteboardTypeString
+        // fallback to NSPasteboardTypeString
         if (!str)
             str = [pb stringForType:NSPasteboardTypeString];
 
@@ -118,18 +118,18 @@ int neo_set(lua_State* L)
     NSString* str = [[NSString alloc] initWithBytes:ptr length:cb
         encoding:NSUTF8StringEncoding];
 
-    // set VimPboardType and NSPasteboardTypeString
+    // set both VimPboardType and NSPasteboardTypeString
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     [pb declareTypes:[NSArray arrayWithObjects:VimPboardType, NSPasteboardTypeString,
         nil] owner:nil];
-    [pb setPropertyList:[NSArray arrayWithObjects:[NSNumber numberWithInt:type], str,
-        nil] forType:VimPboardType];
-    [pb setString:str forType:NSPasteboardTypeString];
+    BOOL success = [pb setString:str forType:NSPasteboardTypeString]
+        && [pb setPropertyList:[NSArray arrayWithObjects:[NSNumber numberWithInt:type],
+            str, nil] forType:VimPboardType];
 
     // cleanup
     [str release];
     lua_pop(L, 1);
 
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, success);
     return 1;
 }

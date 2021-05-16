@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 May 15
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -11,7 +11,7 @@
 
 
 // global context
-static void* X = NULL;
+static void* X;
 
 
 // module registration for Lua 5.1
@@ -62,13 +62,14 @@ int neo_start(lua_State* L)
 // stop X thread
 int neo_stop(lua_State* L)
 {
+    (void)L;    // unused
+
     if (X != NULL) {
         neo_X_send(X, proto, dele);
         neo_X_cleanup(X);
         X = NULL;
     }
 
-    (void)L;    // unused
     return 0;
 }
 
@@ -78,7 +79,7 @@ int neo_stop(lua_State* L)
 int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
-    int sel = *lua_tostring(L, 1) != '*' ? clip : prim;
+    int sel = *lua_tostring(L, 1) == '*' ? prim : clip;
 
     // table to return
     lua_newtable(L);
@@ -107,7 +108,7 @@ int neo_set(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
-    int sel = *lua_tostring(L, 1) != '*' ? clip : prim;
+    int sel = *lua_tostring(L, 1) == '*' ? prim : clip;
     int type = neo_type(*lua_tostring(L, 3));
 
     // change selection data
