@@ -1,6 +1,6 @@
 project('neoclip', 'c', license : 'Unlicense', default_options :
   ['b_ndebug=if-release', 'buildtype=release', 'c_std=c99', 'default_library=shared',
-    'install_umask=0177', 'warning_level=3', 'werror=true'])
+    'install_umask=0177', 'strip=true', 'warning_level=3', 'werror=true'])
 
 install_dir = meson.source_root() / '../lua'
 lua = dependency('luajit')

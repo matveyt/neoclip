@@ -11,7 +11,7 @@ Currently supported platforms are Windows, macOS and X. You have to compile
 platform-dependent module from source before use. For example,
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
-    $ meson build && ninja -C build install
+    $ cmake -B build -G Ninja && ninja -C build install/strip
 >
 Run |:checkhealth| to make sure that |Neoclip| is up and running.
 
