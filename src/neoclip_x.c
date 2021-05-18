@@ -1,22 +1,26 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 15
+ * Last Change:  2021 May 29
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip.h"
-#include "neo_x.h"
+#include "neoclip_x.h"
 
 
 // global context
-static void* X;
+static void* X = NULL;
 
 
 // module registration for Lua 5.1
 __attribute__((visibility("default")))
+#if (PLATFORM_type == PLATFORM_X11)
 int luaopen_neoclip_x11(lua_State* L)
+#elif (PLATFORM_type == PLATFORM_Wayland)
+int luaopen_neoclip_wl(lua_State* L)
+#endif
 {
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
@@ -34,16 +38,20 @@ int luaopen_neoclip_x11(lua_State* L)
 
 // library cleanup
 __attribute__((destructor))
+#if (PLATFORM_type == PLATFORM_X11)
 void luaclose_neoclip_x11(void)
+#elif (PLATFORM_type == PLATFORM_Wayland)
+void luaclose_neoclip_wl(void)
+#endif
 {
-    neo_stop(NULL);
+    neo_kill(X);
 }
 
 
 // module ID
 int neo_id(lua_State* L)
 {
-    lua_pushliteral(L, "neoclip/X11");
+    lua_pushliteral(L, "neoclip/" _STRING(PLATFORM));
     return 1;
 }
 
@@ -52,8 +60,7 @@ int neo_id(lua_State* L)
 int neo_start(lua_State* L)
 {
     if (X == NULL)
-        X = neo_X_start();
-
+        X = neo_create();
     lua_pushboolean(L, X != NULL);
     return 1;
 }
@@ -63,13 +70,8 @@ int neo_start(lua_State* L)
 int neo_stop(lua_State* L)
 {
     (void)L;    // unused
-
-    if (X != NULL) {
-        neo_X_send(X, proto, dele);
-        neo_X_cleanup(X);
-        X = NULL;
-    }
-
+    neo_kill(X);
+    X = NULL;
     return 0;
 }
 
@@ -88,11 +90,11 @@ int neo_get(lua_State* L)
     if (X != NULL) {
         size_t cb;
         int type;
-        const void* buf = neo_X_update(X, sel, &cb, &type);
+        const void* buf = neo_fetch(X, sel, &cb, &type);
 
         if (buf != NULL) {
             neo_split(L, lua_gettop(L), buf, cb, type);
-            neo_X_lock(X, 0);
+            neo_lock(X, 0);
         }
     }
 
@@ -120,9 +122,7 @@ int neo_set(lua_State* L)
         const char* ptr = lua_tolstring(L, -1, &cb);
 
         // owned
-        neo_X_ready(X, sel, ptr, cb, type);
-        neo_X_send(X, neo_owned, sel);
-
+        neo_own(X, 1, sel, ptr, cb, type);
         lua_pop(L, 1);
     }
 

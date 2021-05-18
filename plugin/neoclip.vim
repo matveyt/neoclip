@@ -1,16 +1,16 @@
-" Neovim clipboard provider implementation
-" Last Change:  2021 May 14
+" Neovim clipboard provider
+" Last Change:  2021 May 29
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
-if exists('g:loaded_neoclip') || !has('nvim')
+if exists('g:loaded_neoclip') || exists('g:clipboard') || !has('nvim')
     finish
 endif
 
 lua<<
-    local prequire = function(name)
+    local function prequire(name)
         local ok, module = pcall(require, name)
-        return ok and module or nil
+        return ok and module.start() and module or nil
     end
     if vim.fn.has"win32" ~= 0 then
         neoclip = prequire"neoclip_w32"
@@ -20,10 +20,15 @@ lua<<
         neoclip = os.getenv"WAYLAND_DISPLAY" and
             prequire"neoclip_wl" or prequire"neoclip_x11"
     end
-    vim.g.loaded_neoclip = neoclip and neoclip.start() or false
+    vim.g.loaded_neoclip = neoclip ~= nil
 .
 
 if g:loaded_neoclip
+    augroup neoclip | au!
+        autocmd VimSuspend * lua neoclip.stop()
+        autocmd VimResume * lua neoclip.start()
+    augroup end
+
     let g:clipboard = {
         \ 'name': luaeval('neoclip.id()'),
         \ 'copy': {

@@ -5,7 +5,7 @@ additional tools, such as `win32yank`, `xclip`, `xsel`, `pbcopy`, `pbpaste` etc.
 
 See `:h provider-clipboard` for more info.
 
-Currently supported platforms are Windows, macOS and X. You have to compile
+Supported platforms are Windows, macOS, X11 and Wayland. You have to compile
 platform-dependent module from source before use. For example,
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
