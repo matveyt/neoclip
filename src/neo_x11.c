@@ -6,7 +6,7 @@
  */
 
 
-#include "neoclip_x.h"
+#include "neoclip_nix.h"
 #include <limits.h>
 #include <pthread.h>
 #include <stdlib.h>

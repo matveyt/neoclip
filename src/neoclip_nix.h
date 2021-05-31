@@ -1,13 +1,13 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 29
+ * Last Change:  2021 May 31
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#ifndef NEOCLIP_X_H
-#define NEOCLIP_X_H
+#ifndef NEOCLIP_NIX_H
+#define NEOCLIP_NIX_H
 
 
 #include <stddef.h>
@@ -69,4 +69,4 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype);
 void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type);
 
 
-#endif // NEOCLIP_X_H
+#endif // NEOCLIP_NIX_H

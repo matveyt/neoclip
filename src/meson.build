@@ -4,7 +4,7 @@ project('neoclip', 'c', license : 'Unlicense', default_options :
 
 install_dir = meson.source_root() / '../lua'
 lua = dependency('luajit')
-name_prefix = ''
+c_args = []
 name_suffix = []
 
 if host_machine.system() == 'windows'
@@ -19,7 +19,8 @@ elif host_machine.system() == 'darwin'
   name_suffix = 'so'
 else # *nix
   target = 'neoclip_x11'
-  sources = ['neoclip_x.c', 'neo_x11.c', 'neo_common.c']
+  sources = ['neoclip_nix.c', 'neo_x11.c', 'neo_common.c']
+  c_args += '-DPLATFORM=X11'
   threads = dependency('threads')
   deps = [lua, meson.get_compiler('c').find_library('X11'), threads]
 
@@ -35,18 +36,17 @@ else # *nix
     wlr_data_control_c = custom_target('wlr-data-control-c',
       input : wlr_data_control_xml, output : 'wayland-wlr-data-control-protocol.c',
       command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
-    sources2 = ['neoclip_x.c', 'neo_wayland.c', 'neo_common.c', wlr_data_control_h,
+    sources2 = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c', wlr_data_control_h,
       wlr_data_control_c]
   endif
 endif
 
-library(target, sources, dependencies : deps, gnu_symbol_visibility : 'internal',
-  name_prefix : name_prefix, name_suffix : name_suffix, install : true,
-  install_dir : install_dir)
+library(target, sources, c_args : c_args, dependencies : deps,
+  gnu_symbol_visibility : 'internal', name_prefix : '', name_suffix : name_suffix,
+  install : true, install_dir : install_dir)
 
 if is_variable('target2')
   library(target2, sources2, c_args : '-DPLATFORM=Wayland',
     dependencies : [lua, wl_client, threads], gnu_symbol_visibility : 'internal',
-    name_prefix : name_prefix, name_suffix : name_suffix, install : true,
-    install_dir : install_dir)
+    name_prefix : '', install : true, install_dir : install_dir)
 endif

@@ -1,13 +1,13 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 29
+ * Last Change:  2021 May 31
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip.h"
-#include "neoclip_x.h"
+#include "neoclip_nix.h"
 
 
 // global context
