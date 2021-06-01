@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 31
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -49,8 +49,7 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
 void* neo_create(void)
 {
     // try to open display first
-    const char* display_name = getenv("DISPLAY");
-    Display* d = XOpenDisplay(display_name ? display_name : ":0");
+    Display* d = XOpenDisplay(NULL);
     if (d == NULL)
         return NULL;
 
