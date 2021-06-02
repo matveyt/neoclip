@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 15
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -84,7 +84,7 @@ int neo_get(lua_State* L)
         }
 
         // fallback to NSPasteboardTypeString
-        if (!str)
+        if (str == nil)
             str = [pb stringForType:NSPasteboardTypeString];
 
         // convert to UTF-8 and split into table

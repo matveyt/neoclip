@@ -15,7 +15,7 @@ platform-dependent module from source before use. For example,
 >
 Run |:checkhealth| to make sure that |Neoclip| is up and running.
 
-IMPORTANT: neoclip/Wayland module requires wlr-data-control protocol support
+IMPORTANT: neoclip/Wayland module requires wlr-data-control protocol.
 https://wayland.app/protocols/wlr-data-control-unstable-v1 If your Wayland
 compositor does not provide it (e.g. GNOME/Mutter) then |Neoclip| will revert
 back to neoclip/X11.

@@ -1,5 +1,5 @@
 " Neovim clipboard provider
-" Last Change:  2021 May 29
+" Last Change:  2021 Jun 01
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -17,8 +17,8 @@ lua<<
     elseif vim.fn.has"mac" ~= 0 then
         neoclip = prequire"neoclip_mac"
     elseif vim.fn.has"unix" ~= 0 then
-        neoclip = os.getenv"WAYLAND_DISPLAY" and
-            prequire"neoclip_wl" or prequire"neoclip_x11"
+        neoclip = os.getenv"WAYLAND_DISPLAY" and prequire"neoclip_wl"
+            or prequire"neoclip_x11"
     end
     vim.g.loaded_neoclip = neoclip ~= nil
 .

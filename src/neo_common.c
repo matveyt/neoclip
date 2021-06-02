@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 16
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -31,10 +31,10 @@ int neo_type(int ch)
 
 // split UTF-8 string into lines (LF or CRLF) and save in table [lines, regtype]
 // chop invalid data, e.g. trailing zero in Windows Clipboard
-void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
+void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type)
 {
     // validate input
-    luaL_checktype(L, idx, LUA_TTABLE);
+    luaL_checktype(L, ix, LUA_TTABLE);
     if (data == NULL || cb < 1)
         return;
 
@@ -90,28 +90,28 @@ void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type)
     lua_rawseti(L, -2, i);
 
     // save result
-    lua_rawseti(L, idx, 1);
+    lua_rawseti(L, ix, 1);
     lua_pushlstring(L, type == 0 ? "v" : type == 1 ? "V" : type == 2 ? "\026" :
         off ? "v" : "V" , sizeof(char));
-    lua_rawseti(L, idx, 2);
+    lua_rawseti(L, ix, 2);
 }
 
 
 // table concatenation (numeric indices only)
 // return string on Lua stack
-void neo_join(lua_State* L, int idx, const char* sep)
+void neo_join(lua_State* L, int ix, const char* sep)
 {
     luaL_Buffer b;
     luaL_buffinit(L, &b);
 
-    int n = lua_objlen(L, idx);
+    int n = lua_objlen(L, ix);
     if (n > 0) {
         for (int i = 1; i < n; ++i) {
-            lua_rawgeti(L, idx, i);
+            lua_rawgeti(L, ix, i);
             luaL_addvalue(&b);
             luaL_addstring(&b, sep);
         }
-        lua_rawgeti(L, idx, n);
+        lua_rawgeti(L, ix, n);
         luaL_addvalue(&b);
     }
 

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 31
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -51,7 +51,7 @@ void luaclose_neoclip_wl(void)
 // module ID
 int neo_id(lua_State* L)
 {
-    lua_pushliteral(L, "neoclip/" _STRING(PLATFORM));
+    lua_pushliteral(L, "neoclip/" _STRINGIZE(PLATFORM));
     return 1;
 }
 

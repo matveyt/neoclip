@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 14
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -24,8 +24,8 @@ extern int neo_set(lua_State* L);
 
 // neo_common.c
 extern int neo_type(int ch);
-extern void neo_split(lua_State* L, int idx, const void* data, size_t cb, int type);
-extern void neo_join(lua_State* L, int idx, const char* sep);
+extern void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type);
+extern void neo_join(lua_State* L, int ix, const char* sep);
 
 
 #endif // NEOCLIP_H

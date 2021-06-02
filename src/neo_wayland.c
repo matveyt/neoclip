@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 31
+ * Last Change:  2021 Jun 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -440,7 +440,7 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
                 data = ptr + 1 + sizeof("utf-8");
                 cb -= 1 + sizeof("utf-8");
             } else {
-                // Vim should also support UTF8_STRING
+                // Vim must have UTF8_STRING
                 free(ptr);
                 data = ptr = offer_read(w, offer, "UTF8_STRING", &cb);
             }
