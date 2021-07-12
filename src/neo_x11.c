@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jun 01
+ * Last Change:  2021 Jul 11
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -160,7 +160,7 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
 
 
 // own new selection
-// cb=0 empty selection, type<0 keep old selection
+// cb = 0 -- empty selection, type < 0 -- keep old selection
 void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type)
 {
     if (!neo_lock(X, 1)) {

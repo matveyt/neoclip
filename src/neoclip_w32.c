@@ -1,16 +1,14 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 May 16
+ * Last Change:  2021 Jul 11
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
+#define WIN32_LEAN_AND_MEAN
 #include "neoclip.h"
-#include <windef.h>
-#include <winbase.h>
-#include <winnls.h>
-#include <winuser.h>
+#include <windows.h>
 
 
 // forward prototypes

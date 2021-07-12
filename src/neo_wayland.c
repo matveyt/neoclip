@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jun 01
+ * Last Change:  2021 Jul 11
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,9 +9,9 @@
 #include "neoclip_nix.h"
 #include <poll.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 #include <unistd.h>
 #include <sys/signalfd.h>
 #include <wayland-client.h>
@@ -47,7 +47,7 @@ static void data_control_source_cancelled(void* X,
         const int count; \
         void* impl; \
     } _listen[] =
-#define OBJECT(ix, obj) [INDEX(ix)] = { \
+#define OBJECT(obj, ix) [ix] = { \
     .count = sizeof(struct obj##_listener) / sizeof(void(*)(void)), \
     .impl = &(struct obj##_listener)
 
@@ -62,23 +62,23 @@ enum {
 
 
 LISTEN {
-    OBJECT(registry, wl_registry) {
+    OBJECT(wl_registry, INDEX(registry)) {
         .global = registry_global,
     }},
-    OBJECT(device, zwlr_data_control_device_v1) {
+    OBJECT(zwlr_data_control_device_v1, INDEX(device)) {
         .data_offer = data_control_device_data_offer,
         .primary_selection = data_control_device_primary_selection,
         .selection = data_control_device_selection,
         .finished = data_control_device_finished,
     }},
-    OBJECT(offer, zwlr_data_control_offer_v1) {
+    OBJECT(zwlr_data_control_offer_v1, INDEX(offer)) {
         .offer = data_control_offer_offer,
     }},
-    OBJECT(source_prim, zwlr_data_control_source_v1) {
+    OBJECT(zwlr_data_control_source_v1, INDEX(source_prim)) {
         .send = data_control_source_send_prim,
         .cancelled = data_control_source_cancelled,
     }},
-    OBJECT(source_clip, zwlr_data_control_source_v1) {
+    OBJECT(zwlr_data_control_source_v1, INDEX(source_clip)) {
         .send = data_control_source_send_clip,
         .cancelled = data_control_source_cancelled,
     }},
@@ -204,7 +204,7 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
         neo_W* w = (neo_W*)X;
         int ix_sel = (sel == prim) ? 0 : 1;
 
-        // wlr_data_control_device should've informed us of new selection
+        // wlr_data_control_device should've informed us of a new selection
         if (w->cb[ix_sel] > 0) {
             *pcb = w->cb[ix_sel];
             *ptype = w->data[ix_sel][0];

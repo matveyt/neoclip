@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jun 01
+ * Last Change:  2021 Jul 09
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -14,10 +14,10 @@
 
 
 #ifndef _CONCAT
-#define _CONCAT2(_Token1, _Token2)  _Token1 ## _Token2
-#define _CONCAT(_Token1, _Token2)   _CONCAT2(_Token1, _Token2)
-#define _STRINGIZE2(_Token) #_Token
-#define _STRINGIZE(_Token) _STRINGIZE2(_Token)
+#define _CONCAT(_Token1,_Token2)   _CONCAT2(_Token1,_Token2)
+#define _CONCAT2(_Token1,_Token2)  _Token1##_Token2
+#define _STRINGIZE(_Token)          _STRINGIZE2(_Token)
+#define _STRINGIZE2(_Token)         #_Token
 #endif // _CONCAT
 
 #ifndef PLATFORM
