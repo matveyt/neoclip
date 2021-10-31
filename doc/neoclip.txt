@@ -4,21 +4,56 @@
 OVERVIEW                                                             *neoclip*
 
 |Neoclip| is a clipboard provider for Neovim |provider-clipboard|. It allows
-to access system clipboard without any additional tools, such as `win32yank`,
+to access system clipboard without any external tools, such as `win32yank`,
 `xclip`, `xsel`, `pbcopy`, `pbpaste` etc.
 
-Supported platforms are Windows, macOS, X11 and Wayland. You have to compile
-platform-dependent module from source before use. For example,
+Supported platforms are Windows, macOS and *nix (with X11 or Wayland).
+
+==============================================================================
+BUILDING                                                         *neoclip-build*
+
+|Neoclip| has to be built from source. So you'll need C (Objective C for
+macOS) compiler and tools installed on your machine.
+
+You'll also need a project build tool. Both CMake https://cmake.org and
+Meson https://mesonbuild.com will do.
+
+The common build pre-requisite for all platforms is LuaJIT https://luajit.org.
+This is because we're going to make a Lua binary extension module for Neovim's
+builtin engine. The exact package name and installation method depends on your
+OS/distro. For example, on Debian GNU/Linux it could be >
+
+    $sudo apt install libluajit-5.1-dev
+
+Hopefully, it's enough for both Windows and macOS. But on *nix we need also
+threads, X11 and Wayland client libraries. Some of them may already be
+installed, while some are not. An example suitable for Debian GNU/Linux >
+
+    $sudo apt install libx11-dev libwayland-dev
+
+And the final point. CMake doesn't support Wayland libraries out-of-the-box.
+So building the project with CMake may require installing ECM (aka Extra CMake
+Modules) package as well. Otherwise neoclip/Wayland module could be quietly
+skipped. >
+
+    $sudo apt install extra-cmake-modules
+
+So finally we should be able to build our project (this is for CMake with
+Ninja as a backend): >
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
     $ cmake -B build -G Ninja && ninja -C build install/strip
 >
-Run |:checkhealth| to make sure that |Neoclip| is up and running.
+Now run Neovim and do |:checkhealth| to see if clipboard tool has been set up
+properly.
 
-IMPORTANT: neoclip/Wayland module requires wlr-data-control protocol.
-https://wayland.app/protocols/wlr-data-control-unstable-v1 If your Wayland
-compositor does not provide it (e.g. GNOME/Mutter) then |Neoclip| will revert
-back to neoclip/X11.
+==============================================================================
+ISSUES                                                          *neoclip-issues*
+
+neoclip/Wayland module requires wlr-data-control protocol
+https://wayland.app/protocols/wlr-data-control-unstable-v1. If your Wayland
+compositor does not provide it (e.g. GNOME/Mutter) then neoclip/X11 will be
+tried instead.
 
 ==============================================================================
  vim:tw=78:ts=8:noet:ft=help:norl:
