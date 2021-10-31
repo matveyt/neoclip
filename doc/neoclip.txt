@@ -43,9 +43,9 @@ Ninja as a backend): >
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
     $ cmake -B build -G Ninja && ninja -C build install/strip
->
-Now run Neovim and do |:checkhealth| to see if clipboard tool has been set up
-properly.
+
+Now run Neovim and do |:checkhealth| to see if the clipboard provider has been
+set up properly.
 
 ==============================================================================
 ISSUES                                                          *neoclip-issues*
