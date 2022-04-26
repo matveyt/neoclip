@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jul 11
+ * Last Change:  2022 Apr 26
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -169,7 +169,7 @@ void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type)
 
         // set new data
         if (type >= 0) {
-            // _VIMENC_TEXT: motion 'encoding' NUL text
+            // _VIMENC_TEXT: type 'encoding' NUL text
             alloc_data(x, ix_sel, cb);
             if (cb) {
                 x->data[ix_sel][0] = type;
@@ -534,10 +534,10 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
     unsigned char* xptr = NULL;
 
     if (type == x->atom[vimenc]) {
-        // _VIMENC_TEXT: motion 'encoding' NUL text
+        // _VIMENC_TEXT: type 'encoding' NUL text
         xtp.nitems += 1 + sizeof("utf-8");
     } else if (type == x->atom[vimtext]) {
-        // _VIM_TEXT: motion text
+        // _VIM_TEXT: type text
         ptr = malloc(1 + xtp.nitems);
         ptr[0] = xtp.value[0];
         memcpy(ptr + 1, xtp.value + 1 + sizeof("utf-8"), xtp.nitems);

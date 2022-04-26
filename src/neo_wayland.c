@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jul 11
+ * Last Change:  2022 Apr 26
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -226,7 +226,7 @@ void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type)
         neo_W* w = (neo_W*)X;
         int ix_sel = (sel == prim) ? 0 : 1;
 
-        // _VIMENC_TEXT: motion 'encoding' NUL text
+        // _VIMENC_TEXT: type 'encoding' NUL text
         w->data[ix_sel] = realloc(w->data[ix_sel], cb ? 1 + sizeof("utf-8") + cb : 0);
         w->cb[ix_sel] = cb;
         if (cb) {
@@ -291,8 +291,8 @@ static void* thread_main(void* X)
 
         if (fds[1].revents & POLLIN) {
             struct signalfd_siginfo ssi;
-            read(fds[1].fd, &ssi, sizeof(ssi));
-            if (ssi.ssi_signo == SIGINT || ssi.ssi_signo == SIGTERM)
+            size_t cb = read(fds[1].fd, &ssi, sizeof(ssi));
+            if (cb != sizeof(ssi) || ssi.ssi_signo == SIGINT || ssi.ssi_signo == SIGTERM)
                 break;
         }
     }
@@ -465,23 +465,23 @@ static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
     int ix_sel = (sel == prim) ? 0 : 1;
 
     if (!neo_lock(w, 1)) {
-        unsigned char* buf;
-        size_t cb;
+        // assume _VIMENC_TEXT
+        unsigned char* buf = w->data[ix_sel];
+        size_t cb = 1 + sizeof("utf-8") + w->cb[ix_sel];
 
-        if (!strcmp(mime_type, mime[0])) {
-            // _VIMENC_TEXT
-            buf = w->data[ix_sel];
-            cb = 1 + sizeof("utf-8") + w->cb[ix_sel];
-        } else {
-            // _VIM_TEXT
+        // not _VIMENC_TEXT?
+        if (strcmp(mime_type, mime[0])) {
+            // _VIM_TEXT: output type
             if (!strcmp(mime_type, mime[1]))
-                write(fd, w->data[ix_sel], 1);
+                (void)write(fd, buf, 1);
 
-            buf = w->data[ix_sel] + 1 + sizeof("utf-8");
-            cb = w->cb[ix_sel];
+            // skip over header
+            buf += 1 + sizeof("utf-8");
+            cb -= 1 + sizeof("utf-8");
         }
 
-        write(fd, buf, cb);
+        // output selection
+        (void)write(fd, buf, cb);
         neo_lock(w, 0);
     }
 
@@ -493,25 +493,26 @@ static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
     const char* mime, size_t* pcb)
 {
-    int fds[2];
-    pipe(fds);
-    zwlr_data_control_offer_v1_receive(offer, mime, fds[1]);
-    wl_display_roundtrip(w->d);
-    close(fds[1]);
-
     void* ptr = NULL;
     size_t total = 0;
-    void* buf = malloc(256 * 1024);
-    ssize_t part;
+    int fds[2];
 
-    while ((part = read(fds[0], buf, 256 * 1024)) > 0) {
-        ptr = realloc(ptr, total + part);
-        memcpy((char*)ptr + total, buf, part);
-        total += part;
+    if (!pipe(fds)) {
+        zwlr_data_control_offer_v1_receive(offer, mime, fds[1]);
+        wl_display_roundtrip(w->d);
+        close(fds[1]);
+
+        void* buf = malloc(256 * 1024);
+        ssize_t part;
+        while ((part = read(fds[0], buf, 256 * 1024)) > 0) {
+            ptr = realloc(ptr, total + part);
+            memcpy((char*)ptr + total, buf, part);
+            total += part;
+        }
+        free(buf);
+        close(fds[0]);
     }
 
-    free(buf);
-    close(fds[0]);
     *pcb = total;
     return ptr;
 }
