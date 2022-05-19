@@ -1,5 +1,5 @@
 " Neovim clipboard provider
-" Last Change:  2022 May 15
+" Last Change:  2022 May 18
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
@@ -8,9 +8,9 @@ if exists('g:loaded_neoclip') || exists('g:clipboard') || !has('nvim')
 endif
 
 lua<<
-    local function prequire(name)
-        local ok, module = pcall(require, name)
-        return ok and module.start() and module or nil
+    local function prequire(...)
+        local ok, module = pcall(require, ...)
+        return ok and module.start() and module
     end
 
     if vim.fn.has"win32" == 1 then
