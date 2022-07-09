@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Apr 26
+ * Last Change:  2022 Jul 09
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -48,7 +48,14 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
 // init context and start thread
 void* neo_create(void)
 {
-    // try to open display first
+    // initialize X threads (required for xcb)
+    static Status xthreads_status = -1;
+    if (xthreads_status < 0)
+        xthreads_status = XInitThreads();
+    if (xthreads_status == False)
+        return NULL;
+
+    // try to open display
     Display* d = XOpenDisplay(NULL);
     if (d == NULL)
         return NULL;
@@ -352,9 +359,10 @@ static Bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
             // refuse request for non-matching timestamp
             xse.property = None;
         } else if (xse.target == x->atom[targets]) {
-            // response type is ATOM
-            // GNOME is FUBAR, see http://www.edwardrosten.com/code/x11.html
-            //xse.target = x->atom[atom];
+            // should the response type be ATOM or TARGETS?!
+            // see http://www.edwardrosten.com/code/x11.html
+            if (targets_atom)
+                xse.target = x->atom[atom];
             XChangeProperty(x->d, xse.requestor, xse.property, xse.target, 32,
                 PropModeReplace, (unsigned char*)&x->atom[targets], total - targets);
         } else if (xse.target == x->atom[dele] || xse.target == x->atom[save]) {

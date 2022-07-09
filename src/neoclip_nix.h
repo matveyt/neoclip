@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jul 09
+ * Last Change:  2022 Jul 09
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -28,6 +28,7 @@
 #define PLATFORM_type       _CONCAT(PLATFORM_, PLATFORM)
 
 
+#if (PLATFORM_TYPE == PLATFORM_X11)
 // atoms
 enum {
     prim,       // PRIMARY
@@ -59,6 +60,10 @@ enum {
     text,       // TEXT
     total
 };
+
+// set response type for TARGETS
+extern int targets_atom;
+#endif
 
 
 void* neo_create(void);

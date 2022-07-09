@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2021 Jun 01
+ * Last Change:  2022 Jul 09
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,6 +12,11 @@
 
 // global context
 static void* X = NULL;
+
+#if (PLATFORM_TYPE == PLATFORM_X11)
+// set response type for TARGETS as ATOM
+int targets_atom = 0;
+#endif
 
 
 // module registration for Lua 5.1
@@ -59,6 +64,10 @@ int neo_id(lua_State* L)
 // run X thread
 int neo_start(lua_State* L)
 {
+#if (PLATFORM_TYPE == PLATFORM_X11)
+    targets_atom = neo_vimg(L, "neoclip_targets_atom");
+#endif
+
     if (X == NULL)
         X = neo_create();
     lua_pushboolean(L, X != NULL);
