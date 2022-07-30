@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Apr 26
+ * Last Change:  2022 Jul 30
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -460,6 +460,8 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
 
 
 // write selection data to file descriptor
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
 static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 {
     int ix_sel = (sel == prim) ? 0 : 1;
@@ -487,6 +489,7 @@ static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 
     close(fd);
 }
+#pragma GCC diagnostic pop
 
 
 // read specific mime type from offer

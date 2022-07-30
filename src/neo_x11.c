@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 09
+ * Last Change:  2022 Jul 30
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -45,16 +45,26 @@ static void to_multiple(neo_X* x, int ix_sel, XSelectionEvent* xse);
 static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type);
 
 
+// should response for TARGETS have the type of ATOM or TARGETS?!
+// see http://www.edwardrosten.com/code/x11.html
+static int notify_targets = targets;
+
+
+// one time module initialization
+int neo_xinit(int targets_atom)
+{
+    // initialize X threads (required for xcb)
+    if (XInitThreads() == False)
+        return 0;
+
+    notify_targets = targets_atom ? atom : targets;
+    return 1;
+}
+
+
 // init context and start thread
 void* neo_create(void)
 {
-    // initialize X threads (required for xcb)
-    static Status xthreads_status = -1;
-    if (xthreads_status < 0)
-        xthreads_status = XInitThreads();
-    if (xthreads_status == False)
-        return NULL;
-
     // try to open display
     Display* d = XOpenDisplay(NULL);
     if (d == NULL)
@@ -359,10 +369,7 @@ static Bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
             // refuse request for non-matching timestamp
             xse.property = None;
         } else if (xse.target == x->atom[targets]) {
-            // should the response type be ATOM or TARGETS?!
-            // see http://www.edwardrosten.com/code/x11.html
-            if (targets_atom)
-                xse.target = x->atom[atom];
+            xse.target = x->atom[notify_targets];
             XChangeProperty(x->d, xse.requestor, xse.property, xse.target, 32,
                 PropModeReplace, (unsigned char*)&x->atom[targets], total - targets);
         } else if (xse.target == x->atom[dele] || xse.target == x->atom[save]) {

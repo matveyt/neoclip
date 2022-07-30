@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 09
+ * Last Change:  2022 Jul 30
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,20 +13,20 @@
 // global context
 static void* X = NULL;
 
-#if (PLATFORM_TYPE == PLATFORM_X11)
-// set response type for TARGETS as ATOM
-int targets_atom = 0;
-#endif
-
 
 // module registration for Lua 5.1
 __attribute__((visibility("default")))
-#if (PLATFORM_type == PLATFORM_X11)
+#if (PLATFORM_Type == PLATFORM_X11)
 int luaopen_neoclip_x11(lua_State* L)
-#elif (PLATFORM_type == PLATFORM_Wayland)
+#elif (PLATFORM_Type == PLATFORM_Wayland)
 int luaopen_neoclip_wl(lua_State* L)
 #endif
 {
+#if (PLATFORM_Type == PLATFORM_X11)
+    if (!neo_xinit(neo_vimg(L, "neoclip_targets_atom")))
+        return luaL_error(L, "XInitThreads failed");
+#endif
+
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
         { "start", neo_start },
@@ -43,9 +43,9 @@ int luaopen_neoclip_wl(lua_State* L)
 
 // library cleanup
 __attribute__((destructor))
-#if (PLATFORM_type == PLATFORM_X11)
+#if (PLATFORM_Type == PLATFORM_X11)
 void luaclose_neoclip_x11(void)
-#elif (PLATFORM_type == PLATFORM_Wayland)
+#elif (PLATFORM_Type == PLATFORM_Wayland)
 void luaclose_neoclip_wl(void)
 #endif
 {
@@ -64,10 +64,6 @@ int neo_id(lua_State* L)
 // run X thread
 int neo_start(lua_State* L)
 {
-#if (PLATFORM_TYPE == PLATFORM_X11)
-    targets_atom = neo_vimg(L, "neoclip_targets_atom");
-#endif
-
     if (X == NULL)
         X = neo_create();
     lua_pushboolean(L, X != NULL);
