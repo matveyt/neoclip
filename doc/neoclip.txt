@@ -1,7 +1,7 @@
 *neoclip.txt*	Neovim clipboard provider
 
 ==============================================================================
-OVERVIEW                                                             *neoclip*
+OVERVIEW							     *neoclip*
 
 |Neoclip| is a clipboard provider for Neovim |provider-clipboard|. It allows
 to access system clipboard without any external tools, such as `win32yank`,
@@ -10,7 +10,7 @@ to access system clipboard without any external tools, such as `win32yank`,
 Supported platforms are Windows, macOS and *nix (with X11 or Wayland).
 
 ==============================================================================
-BUILDING                                                         *neoclip-build*
+BUILDING						       *neoclip-build*
 
 |Neoclip| has to be built from source. So you'll need C (or Objective C for
 macOS) compiler and tools installed on your machine.
@@ -48,14 +48,14 @@ Now run Neovim and do |:checkhealth| to see if the clipboard provider has been
 set up properly.
 
 ==============================================================================
-KNOWN ISSUES                                                    *neoclip-issues*
+KNOWN ISSUES						      *neoclip-issues*
 
-                                                  *neoclip-gnome* *neoclip-weston*
+					      *neoclip-gnome* *neoclip-weston*
 neoclip/Wayland module requires wlr-data-control protocol
 https://wayland.app/protocols/wlr-data-control-unstable-v1. If your Wayland
 compositor does not provide it then neoclip/X11 will be tried instead.
 
-                                                                   *neoclip-wsl*
+								 *neoclip-wsl*
 |Neoclip| can run under Windows Subsystem for Linux, assuming WSLg is also
 there. However, the three clipboards (Windows, X11 and Wayland) are
 synchronized strangely, to say the least. Nothing can be done right now,
@@ -64,8 +64,8 @@ except waiting for patches and hoping for the best.
 Also to remember that WSLg Wayland composer is based on Weston, so
 neoclip/Wayland module will never work on WSL. Use neoclip/X11 instead.
 
-                                                          *neoclip-targets-atom*
-This is experimental feature for X11 platform only. By default |neoclip|
+							*neoclip-targets-atom*
+This is an experimental feature for X11 platform only. By default |neoclip|
 responds to TARGETS selection request using the same TARGETS atom. Force use
 of ATOM atom instead with >
     " in VimScript
@@ -74,7 +74,6 @@ of ATOM atom instead with >
     -- or in Lua
     vim.g.neoclip_targets_atom = true
 <
-
 Note that in both cases some programs may fail to communicate properly. See,
 for example, http://www.edwardrosten.com/code/x11.html
 
