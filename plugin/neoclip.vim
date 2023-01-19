@@ -1,10 +1,14 @@
 " Neovim clipboard provider
-" Last Change:  2022 May 18
+" Last Change:  2023 Jan 15
 " License:      https://unlicense.org
 " URL:          https://github.com/matveyt/neoclip
 
 if exists('g:loaded_neoclip') || exists('g:clipboard') || !has('nvim')
     finish
+endif
+
+if has('wsl')
+    let g:neoclip_targets_atom = 1
 endif
 
 lua<<

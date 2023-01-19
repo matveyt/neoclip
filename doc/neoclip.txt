@@ -56,13 +56,7 @@ https://wayland.app/protocols/wlr-data-control-unstable-v1. If your Wayland
 compositor does not provide it then neoclip/X11 will be tried instead.
 
 								 *neoclip-wsl*
-|Neoclip| can run under Windows Subsystem for Linux, assuming WSLg is also
-there. However, the three clipboards (Windows, X11 and Wayland) are
-synchronized strangely, to say the least. Nothing can be done right now,
-except waiting for patches and hoping for the best.
-
-Also to remember that WSLg Wayland composer is based on Weston, so
-neoclip/Wayland module will never work on WSL. Use neoclip/X11 instead.
+Work-in-progress.
 
 							*neoclip-targets-atom*
 This is an experimental feature for X11 platform only. By default |neoclip|
