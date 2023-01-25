@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 30
+ * Last Change:  2023 Jan 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -47,18 +47,16 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
 
 // should response for TARGETS have the type of ATOM or TARGETS?!
 // see http://www.edwardrosten.com/code/x11.html
-static int notify_targets = targets;
+static int notify_targets = atom;
 
 
-// one time module initialization
+// one-time module initialization
 int neo_xinit(int targets_atom)
 {
-    // initialize X threads (required for xcb)
-    if (XInitThreads() == False)
-        return 0;
-
     notify_targets = targets_atom ? atom : targets;
-    return 1;
+
+    // initialize X threads (required for xcb)
+    return XInitThreads() != False;
 }
 
 
@@ -557,7 +555,7 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
         ptr[0] = xtp.value[0];
         memcpy(ptr + 1, xtp.value + 1 + sizeof("utf-8"), xtp.nitems);
         xtp.value = ptr;
-        xtp.nitems++;
+        ++xtp.nitems;
     } else {
         // skip header
         xtp.value += 1 + sizeof("utf-8");

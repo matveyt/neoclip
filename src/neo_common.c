@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 09
+ * Last Change:  2023 Jan 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -120,14 +120,16 @@ void neo_join(lua_State* L, int ix, const char* sep)
 
 
 // get vim.g[var] as integer
-int neo_vimg(lua_State* L, const char* var)
+int neo_vimg(lua_State* L, const char* var, int dflt)
 {
     int value;
 
     lua_getglobal(L, "vim");
     lua_getfield(L, -1, "g");
     lua_getfield(L, -1, var);
-    value = lua_isboolean(L, -1) ? lua_toboolean(L, -1) : lua_tointeger(L, -1);
+    value = lua_isnil(L, -1) ? dflt
+        : lua_isboolean(L, -1) ? lua_toboolean(L, -1)
+        : lua_tointeger(L, -1);
     lua_pop(L, 3);
 
     return value;

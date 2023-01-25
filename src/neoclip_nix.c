@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 30
+ * Last Change:  2023 Jan 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -23,7 +23,7 @@ int luaopen_neoclip_wl(lua_State* L)
 #endif
 {
 #if (PLATFORM_Type == PLATFORM_X11)
-    if (!neo_xinit(neo_vimg(L, "neoclip_targets_atom")))
+    if (!neo_xinit(neo_vimg(L, "neoclip_targets_atom", 1)))
         return luaL_error(L, "XInitThreads failed");
 #endif
 

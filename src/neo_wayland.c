@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 30
+ * Last Change:  2023 Jan 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -447,7 +447,7 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
         } else if (*best_mime == 1) {
             // _VIM_TEXT
             data = ptr + 1;
-            cb--;
+            --cb;
         }
 
         neo_own(w, 0, sel, data, cb, type);
