@@ -16,8 +16,13 @@ An example assuming you use [minpac](https://github.com/k-takata/minpac):
 1. Add to your `init.vim`
 ```
     call minpac#init()
-    call minpac#add('matveyt/neoclip')
+    call minpac#add('matveyt/neoclip', #{type: 'opt'})
     "... more plugins to follow
+
+    if has('nvim')
+        packadd! neoclip
+        lua require"neoclip"
+    endif
 ```
 
 2. Save the file and reload configuration
@@ -42,7 +47,7 @@ backend.
 
 5. Run Neovim again and see if it's all right
 ```
-    :checkhealth provider
+    :checkhealth neoclip
 ```
 
 ### Compatibility and other troubles

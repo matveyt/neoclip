@@ -63,7 +63,7 @@ you can figure why then, please, let me know.
 							*neoclip-targets-atom*
 This is an experimental feature for X11 platform only. By default |neoclip|
 responds to TARGETS selection request with an atom of the type, well, ATOM.
-This is what standard says. But, if you need to, you may force usage of
+This is what the standard says. But, if you need to, you may force usage of
 TARGETS atom instead by adding this line of code >
     " in VimScript
     let g:neoclip_targets_atom = 0
