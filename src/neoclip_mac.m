@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 May 30
+ * Last Change:  2024 Jun 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -20,8 +20,9 @@ int luaopen_neoclip_mac(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
-        { "start", neo_start },
-        { "stop", neo_stop },
+        { "start", neo_nil },
+        { "stop", neo_nil },
+        { "status", neo_true },
         { "get", neo_get },
         { "set", neo_set },
         { NULL, NULL }
@@ -36,25 +37,6 @@ int luaopen_neoclip_mac(lua_State* L)
 int neo_id(lua_State* L)
 {
     lua_pushliteral(L, "neoclip/AppKit");
-    return 1;
-}
-
-
-// no-op
-int neo_start(lua_State* L)
-{
-    if (lua_isboolean(L, 1))
-        lua_pushboolean(L, 1);
-    else
-        lua_pushnil(L);
-    return 1;
-}
-
-
-// no-op
-int neo_stop(lua_State* L)
-{
-    lua_pushnil(L);
     return 1;
 }
 

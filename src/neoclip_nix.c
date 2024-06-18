@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 May 30
+ * Last Change:  2024 Jun 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -22,15 +22,11 @@ int luaopen_neoclip_x11(lua_State* L)
 int luaopen_neoclip_wl(lua_State* L)
 #endif
 {
-#if (PLATFORM_Type == PLATFORM_X11)
-    if (!neo_xinit(neo_vimg(L, "neoclip_targets_atom", 1)))
-        return luaL_error(L, "XInitThreads failed");
-#endif
-
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
         { "start", neo_start },
         { "stop", neo_stop },
+        { "status", neo_status },
         { "get", neo_get },
         { "set", neo_set },
         { NULL, NULL }
@@ -64,13 +60,17 @@ int neo_id(lua_State* L)
 // run X thread
 int neo_start(lua_State* L)
 {
-    if (X == NULL)
-        X = neo_create();
+    static int first_run = 1;
 
-    if (lua_isboolean(L, 1))
-        lua_pushboolean(L, X != NULL);
-    else
-        lua_pushnil(L);
+    if (X == NULL) {
+        const char* err;
+        X = neo_create(&err, first_run, neo_vimg(L, "neoclip_targets_atom", 1));
+        first_run = 0;
+        if (X == NULL)
+            return luaL_error(L, err);
+    }
+
+    lua_pushnil(L);
     return 1;
 }
 
@@ -80,8 +80,15 @@ int neo_stop(lua_State* L)
 {
     neo_kill(X);
     X = NULL;
-
     lua_pushnil(L);
+    return 1;
+}
+
+
+// is X thread running?
+int neo_status(lua_State* L)
+{
+    lua_pushboolean(L, X != NULL);
     return 1;
 }
 

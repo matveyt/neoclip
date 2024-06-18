@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2022 Jul 30
+ * Last Change:  2024 Jun 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,19 +13,23 @@
 #include <stddef.h>
 
 
+#ifndef PLATFORM
+#define PLATFORM                    X11
+#endif // PLATFORM
+
 #ifndef _CONCAT
 #define _CONCAT(_Token1,_Token2)   _CONCAT2(_Token1,_Token2)
 #define _CONCAT2(_Token1,_Token2)  _Token1##_Token2
-#define _STRINGIZE(_Token)          _STRINGIZE2(_Token)
-#define _STRINGIZE2(_Token)         #_Token
 #endif // _CONCAT
 
-#ifndef PLATFORM
-#define PLATFORM            X11
-#endif // PLATFORM
-#define PLATFORM_X11        0
-#define PLATFORM_Wayland    1
-#define PLATFORM_Type       _CONCAT(PLATFORM_, PLATFORM)
+#ifndef _STRINGIZE
+#define _STRINGIZE(_Token)          _STRINGIZE2(_Token)
+#define _STRINGIZE2(_Token)         #_Token
+#endif // _STRINGIZE
+
+#define PLATFORM_X11                0
+#define PLATFORM_Wayland            1
+#define PLATFORM_Type               _CONCAT(PLATFORM_, PLATFORM)
 
 
 // atoms
@@ -61,12 +65,8 @@ enum {
 };
 
 
-#if (PLATFORM_Type == PLATFORM_X11)
-int neo_xinit(int targets_atom);
-#endif // PLATFORM_X11
-void* neo_create(void);
+void* neo_create(const char** perr, int first_run, int targets_atom);
 void neo_kill(void* X);
-
 int neo_lock(void* X, int lock);
 const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype);
 void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type);

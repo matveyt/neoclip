@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2023 Jan 25
+ * Last Change:  2024 Jun 15
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -50,23 +50,24 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
 static int notify_targets = atom;
 
 
-// one-time module initialization
-int neo_xinit(int targets_atom)
+// init context and start thread
+void* neo_create(const char** perr, int first_run, int targets_atom)
 {
+    // initialize X threads (required for xcb)
+    if (first_run && XInitThreads() == False) {
+        *perr = "XInitThreads failed";
+        return NULL;
+    }
+
+    // should response for TARGETS have the type of ATOM or TARGETS?!
     notify_targets = targets_atom ? atom : targets;
 
-    // initialize X threads (required for xcb)
-    return XInitThreads() != False;
-}
-
-
-// init context and start thread
-void* neo_create(void)
-{
     // try to open display
     Display* d = XOpenDisplay(NULL);
-    if (d == NULL)
+    if (d == NULL) {
+        *perr = "XOpenDisplay failed";
         return NULL;
+    }
 
     // atom names
     static /*const*/ char* atom_name[total] = {

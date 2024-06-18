@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2023 Jan 25
+ * Last Change:  2024 Jun 16
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -8,6 +8,22 @@
 
 #include "neoclip.h"
 #include <stdint.h>
+
+
+// return nil
+int neo_nil(lua_State* L)
+{
+    lua_pushnil(L);
+    return 1;
+}
+
+
+// return true
+int neo_true(lua_State* L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
 
 
 // convert v/V/^V to MCHAR/MLINE/MBLOCK
