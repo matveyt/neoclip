@@ -21,7 +21,7 @@ An example assuming you use [minpac](https://github.com/k-takata/minpac):
 
     if has('nvim')
         packadd! neoclip
-        lua require"neoclip"
+        lua require"neoclip":setup()
     endif
 ```
 

@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 18
+    Last Change:    2024 Jun 21
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -28,7 +28,9 @@ local function neo_check()
     end
 
     if not neoclip.driver then
-        h.error("Driver module not loaded", neoclip.issues)
+        h.error("Driver module not loaded", neoclip.issues or {
+            "Did you run `neoclip:setup()`?"
+        })
         return
     end
 
@@ -36,9 +38,9 @@ local function neo_check()
         h.ok(neoclip.driver.id() .. " is used")
 
         local display = nil
-        if neoclip.driver.id() == "neoclip/Wayland" then
+        if vim.endswith(neoclip.driver.id(), "/Wayland") then
             display = vim.env.WAYLAND_DISPLAY
-        elseif neoclip.driver.id() == "neoclip/X11" then
+        elseif vim.endswith(neoclip.driver.id(), "/X11") then
             display = vim.env.DISPLAY
         end
         if display then
@@ -47,19 +49,19 @@ local function neo_check()
     else
         h.error(neoclip.driver.id() .. " is loaded but not registered", {
             "Do not install another clipboard provider",
-            "Check list of known issues",
+            "Check list of issues",
             "Try `:lua neoclip:register()`"
         })
     end
 
-    if #neoclip.issues > 0 then
-        h.warn("Known issues", neoclip.issues)
-    end
-
     if not neoclip.driver.status() then
-        h.warn("Driver module was stopped", {
+        h.warn("Driver module stopped", {
             "`:lua neoclip.driver.start()` to restart it"
         })
+    end
+
+    if #neoclip.issues > 0 then
+        h.warn("Found issues", neoclip.issues)
     end
 
     local plus, star = vim.fn.getreginfo"+", vim.fn.getreginfo"*"

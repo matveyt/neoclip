@@ -1,47 +1,46 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 18
+    Last Change:    2024 Jun 20
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
 
 
---[[ local helpers ]]
-
-local function has(...)
-    return vim.api.nvim_call_function("has", {...}) == 1
-end
-
-local function prequire(name, issues)
-    local ok, value1, value2
-
-    ok, value1 = pcall(require, name)
-    if not ok then
-        table.insert(issues, name .. " failed to load")
-        table.insert(issues, value1)
-        return
-    end
-
-    ok, value2 = pcall(value1.start)
-    if not ok then
-        table.insert(issues, name .. " failed to start")
-        table.insert(issues, value2)
-        return
-    end
-
-    return value1
-end
-
-
---[[ module object ]]
-
 neoclip = {
-    driver = nil,
-    issues = {}
+    -- driver = require"neoclip.XYZ"
+    -- issues = {"array", "of", "strings"}
+    --
+    -- issue(format, args)
+    -- require(driver_name)
+    -- register(true_by_default)
+    -- setup(driver_name_or_nil)
 }
 
-function neoclip:register(action)
-    if action ~= false then
+function neoclip:issue(...)
+    self.issues[#self.issues + 1] = string.format(...)
+end
+
+function neoclip:require(driver_name)
+    local status, result1, result2
+
+    status, result1 = pcall(require, driver_name)
+    if status then
+        status, result2 = pcall(result1.start)
+        if status then
+            self.driver = result1
+        else
+            self:issue("%s failed to start", driver_name)
+            self:issue(result2)
+        end
+    else
+        self:issue("%s failed to load", driver_name)
+        self:issue(result1)
+    end
+    return status
+end
+
+function neoclip:register(flag)
+    if flag ~= false then
         -- set g:clipboard
         vim.g.clipboard = {
             name = self.driver.id(),
@@ -87,34 +86,44 @@ function neoclip:register(action)
     end
 end
 
+function neoclip:setup(driver_name)
+    -- local helper
+    local has = function(...)
+        return vim.api.nvim_call_function("has", {...}) == 1
+    end
 
---[[ startup code ]]
+    -- (re-)init self
+    self.driver = nil
+    self.issues = {}
 
--- load driver
-if has"win32" then
-    neoclip.driver = prequire("neoclip.w32", neoclip.issues)
-elseif has"mac" then
-    neoclip.driver = prequire("neoclip.mac", neoclip.issues)
-elseif has"unix" then
-    neoclip.driver = vim.env.WAYLAND_DISPLAY and prequire("neoclip.wl",
-        neoclip.issues) or prequire("neoclip.x11", neoclip.issues)
-end
+    -- load driver
+    if driver_name then
+        self:require(driver_name)
+    elseif has"mac" then
+        self:require"neoclip.mac"
+    elseif has"unix" then
+        local _ = vim.env.WAYLAND_DISPLAY and self:require"neoclip.wl"
+            or self:require"neoclip.x11"
+    elseif has"win32" then
+        self:require"neoclip.w32"
+    end
 
--- extra issues
-if has"wsl" then
-    table.insert(neoclip.issues, "|neoclip-wsl| support is currently broken")
-end
+    -- extra issues
+    if has"wsl" then
+        self:issue"|neoclip-wsl| support is currently broken"
+    end
 
-if vim.go.clipboard ~= "" then
-    table.insert(neoclip.issues, string.format("'clipboard' option is set to *%s*",
-        vim.go.clipboard))
-end
+    if vim.go.clipboard ~= "" then
+        self:issue("'clipboard' option is set to *%s*", vim.go.clipboard)
+    end
 
--- register clipboard hooks
-if neoclip.driver then
-    neoclip:register()
-else
-    vim.api.nvim_err_writeln"neoclip: driver error (run :checkhealth for info)"
+    -- register clipboard hooks
+    if self.driver then
+        self:register()
+    else
+        vim.notify("neoclip: driver error (run :checkhealth for info)",
+            vim.log.levels.WARN)
+    end
 end
 
 return neoclip
