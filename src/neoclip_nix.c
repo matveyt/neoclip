@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 16
+ * Last Change:  2024 Jun 24
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -49,23 +49,17 @@ void luaclose_neoclip_wl(void)
 }
 
 
-// module ID
-int neo_id(lua_State* L)
-{
-    lua_pushliteral(L, "neoclip/" _STRINGIZE(PLATFORM));
-    return 1;
-}
-
-
 // run X thread
 int neo_start(lua_State* L)
 {
-    static int first_run = 1;
-
     if (X == NULL) {
+        static int first_run = 1;
+        int targets_atom = neo_vimg(L, "neoclip_targets_atom", 1);
         const char* err;
-        X = neo_create(&err, first_run, neo_vimg(L, "neoclip_targets_atom", 1));
+
+        X = neo_create(first_run, targets_atom, &err);
         first_run = 0;
+
         if (X == NULL)
             return luaL_error(L, err);
     }

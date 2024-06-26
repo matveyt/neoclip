@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 16
+ * Last Change:  2024 Jun 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -10,23 +10,8 @@
 #include <stdint.h>
 
 
-// return nil
-int neo_nil(lua_State* L)
-{
-    lua_pushnil(L);
-    return 1;
-}
-
-
-// return true
-int neo_true(lua_State* L)
-{
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-
 // convert v/V/^V to MCHAR/MLINE/MBLOCK
+__attribute__((const))
 int neo_type(int ch)
 {
     switch (ch) {
@@ -132,6 +117,30 @@ void neo_join(lua_State* L, int ix, const char* sep)
     }
 
     luaL_pushresult(&b);
+}
+
+
+// return nil
+int neo_nil(lua_State* L)
+{
+    lua_pushnil(L);
+    return 1;
+}
+
+
+// return true
+int neo_true(lua_State* L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+
+// return ID string
+int neo_id(lua_State* L)
+{
+    lua_pushliteral(L, "neoclip/" _STRINGIZE(PLATFORM));
+    return 1;
 }
 
 

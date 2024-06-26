@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 16
+ * Last Change:  2024 Jun 24
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -29,14 +29,6 @@ int luaopen_neoclip_mac(lua_State* L)
     };
     lua_newtable(L);
     luaL_register(L, NULL, methods);
-    return 1;
-}
-
-
-// module ID
-int neo_id(lua_State* L)
-{
-    lua_pushliteral(L, "neoclip/AppKit");
     return 1;
 }
 

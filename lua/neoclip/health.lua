@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 22
+    Last Change:    2024 Jun 26
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -28,14 +28,14 @@ local function neo_check()
     end
 
     if not neoclip.driver then
-        h.error("Driver module not loaded", neoclip.issues or {
-            "Did you run |neoclip:setup()|?"
+        h.error("No driver module loaded", neoclip.issues or {
+            "Have you run |neoclip:setup()|?"
         })
         return
     end
 
     if vim.g.clipboard and vim.g.clipboard.name == neoclip.driver.id() then
-        h.ok(neoclip.driver.id() .. " is used")
+        h.ok(string.format("*%s* driver is in use", neoclip.driver.id()))
 
         local display = nil
         if vim.endswith(neoclip.driver.id(), "Wayland") then
@@ -47,7 +47,8 @@ local function neo_check()
             h.info(string.format("Running on display `%s`", display))
         end
     else
-        h.error(neoclip.driver.id() .. " is loaded but not registered", {
+        h.error(string.format("*%s* driver is loaded but not registered",
+            neoclip.driver.id()), {
             "Do not install another clipboard provider",
             "Check list of issues",
             "Try |neoclip:register()|"

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 15
+ * Last Change:  2024 Jun 26
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -135,10 +135,10 @@ static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
 
 
 // init context and start thread
-void* neo_create(const char** perr, int unused1, int unused2)
+void* neo_create(int first_run, int targets_atom, const char** perr)
 {
-    (void)unused1;
-    (void)unused2;
+    (void)first_run;    // unused
+    (void)targets_atom; // unused
 
     // try to open display first
     struct wl_display* d = wl_display_connect(NULL);
@@ -158,7 +158,7 @@ void* neo_create(const char** perr, int unused1, int unused2)
     wl_display_roundtrip(d);
     wl_registry_destroy(reg);
     if (w->seat == NULL || w->dcm == NULL) {
-        // wlr-data-control not supported
+        wl_display_disconnect(d);
         free(w);
         *perr = "no support for wlr-data-control protocol";
         return NULL;

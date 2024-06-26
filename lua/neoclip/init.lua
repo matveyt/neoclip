@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 22
+    Last Change:    2024 Jun 25
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -100,14 +100,14 @@ function neoclip:setup(driver_name)
     -- load driver
     if driver_name then
         self:require(driver_name)
+    elseif has"win32" then
+        self:require"neoclip.w32"
     elseif has"mac" then
         self:require"neoclip.mac"
     elseif has"unix" then
         -- Wayland first, fallback to X11
         local _ = vim.env.WAYLAND_DISPLAY and self:require"neoclip.wl"
             or self:require"neoclip.x11"
-    elseif has"win32" then
-        self:require"neoclip.w32"
     end
 
     -- doesn't work with WSL
@@ -121,5 +121,6 @@ function neoclip:setup(driver_name)
 
     self:register()
 end
+
 
 return neoclip

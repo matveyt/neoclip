@@ -1,5 +1,7 @@
 *neoclip.txt*	Neovim clipboard provider
 
+                                      Type |gO| to see the table of contents.
+
 ==============================================================================
 OVERVIEW							     *neoclip*
 
@@ -16,36 +18,99 @@ BUILDING						       *neoclip-build*
 macOS) compiler and tools installed on your machine.
 
 You'll also need a project build tool. Both CMake https://cmake.org and
-Meson https://mesonbuild.com will do.
+Meson https://mesonbuild.com are supported.
 
 The common build pre-requisite for all platforms is LuaJIT https://luajit.org.
 This is because we're going to make a Lua binary extension module for Neovim's
-builtin engine. The exact package name and installation method depends on your
+builtin engine. The exact package name and installation method depend on your
 OS/distro. For example, on Debian GNU/Linux it could be >
 
     $sudo apt install libluajit-5.1-dev
-
+<
 Hopefully, it's enough for both Windows and macOS. But on *nix we need also
 threads, X11 and Wayland client libraries. Some of them may already be
 installed, while some are not. An example suitable for Debian GNU/Linux >
 
     $sudo apt install libx11-dev libwayland-dev
-
+<
 And the final point. CMake doesn't support Wayland libraries out-of-the-box.
 So building the project with CMake may require installing ECM (aka Extra CMake
 Modules) package as well. Otherwise neoclip/Wayland module would be quietly
 skipped. >
 
     $sudo apt install extra-cmake-modules
-
-So finally we should be able to build our project (this is for CMake with
-Ninja as a backend): >
+<
+So now we should be able to build our project >
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
-    $ cmake -B build -G Ninja && ninja -C build install/strip
 
-Now run Neovim and do |:checkhealth| to see if the clipboard provider has been
-set up properly.
+    $ # by CMake
+    $ cmake -B build
+    $ cmake --build build
+    $ cmake --install build --strip
+
+    $ # ..or by Meson
+    $ meson setup build
+    $ meson install -C build --strip
+<
+Then run Neovim and type >
+
+    :lua require"neoclip":setup()
+    :checkhealth neoclip
+<
+to see if everything went okay.
+
+==============================================================================
+FUNCTIONS						   *neoclip-functions*
+
+|Neoclip| stores its module table in a global Lua variable named |neoclip|. It
+has the following fields.
+
+							      |neoclip.driver|
+  This is the binary module doing the real job. You can also call it directly
+  if you wish so. Its methods are >
+
+  neoclip.driver.id()				-> string
+  neoclip.driver.start()			-> boolean
+  neoclip.driver.stop()				-> nil
+  neoclip.driver.status()			-> boolean
+  neoclip.driver.get(reg)			-> { string_array, type }
+  neoclip.driver.set(reg, string_array, type)	-> boolean
+<
+  NOTE: start/stop/status are only functional under *nix OS. In Windows and
+  macOS they are doing nothing.
+
+							   |neoclip:require()|
+  This method loads binary module into |neoclip.driver| variable. You seldom
+  need it as |neoclip:setup()| calls it for you. >
+
+  " force loading of X11 module only
+  lua require"neoclip"
+  lua neoclip:require"neoclip.x11"
+  lua neoclip:register()
+<
+							   |neoclip:register()|
+  This method sets or resets |g:clipboard| variable activating the plugin.
+  Usually, you want to call |neoclip:setup()| only. >
+
+  : " deactivate plugin temporarily
+  :lua neoclip:register(false)
+  : " activate it back
+  :lua neoclip:register()
+<
+							      |neoclip:setup()|
+  This is the only method you need to add to your |config|. It is more or less
+  an equivalent of |neoclip:require()| followed by |neoclip:register()|.
+  Optionally, it accepts the binary driver name to pass to |neoclip:require()|. >
+
+  " add this line to your config
+  lua require"neoclip":setup()
+<
+==============================================================================
+HEALTH							      *neoclip-health*
+
+|Neoclip| implements Neovim |health| API. Run |:checkhealth| command to monitor its
+current status.
 
 ==============================================================================
 KNOWN ISSUES						      *neoclip-issues*

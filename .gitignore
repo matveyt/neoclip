@@ -1,5 +1,5 @@
 *.a
 *.dll
 *.so
-src/build
+build/
 tags

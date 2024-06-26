@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 16
+ * Last Change:  2024 Jun 25
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -11,25 +11,6 @@
 
 
 #include <stddef.h>
-
-
-#ifndef PLATFORM
-#define PLATFORM                    X11
-#endif // PLATFORM
-
-#ifndef _CONCAT
-#define _CONCAT(_Token1,_Token2)   _CONCAT2(_Token1,_Token2)
-#define _CONCAT2(_Token1,_Token2)  _Token1##_Token2
-#endif // _CONCAT
-
-#ifndef _STRINGIZE
-#define _STRINGIZE(_Token)          _STRINGIZE2(_Token)
-#define _STRINGIZE2(_Token)         #_Token
-#endif // _STRINGIZE
-
-#define PLATFORM_X11                0
-#define PLATFORM_Wayland            1
-#define PLATFORM_Type               _CONCAT(PLATFORM_, PLATFORM)
 
 
 // atoms
@@ -61,11 +42,12 @@ enum {
     compound,   // COMPOUND_TEXT
     string,     // STRING
     text,       // TEXT
+    // total count
     total
 };
 
 
-void* neo_create(const char** perr, int first_run, int targets_atom);
+void* neo_create(int first_run, int targets_atom, const char** perr);
 void neo_kill(void* X);
 int neo_lock(void* X, int lock);
 const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype);

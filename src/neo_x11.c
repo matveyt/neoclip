@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 15
+ * Last Change:  2024 Jun 26
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -46,12 +46,12 @@ static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type
 
 
 // should response for TARGETS have the type of ATOM or TARGETS?!
-// see http://www.edwardrosten.com/code/x11.html
+// see https://www.edwardrosten.com/code/x11.html
 static int notify_targets = atom;
 
 
 // init context and start thread
-void* neo_create(const char** perr, int first_run, int targets_atom)
+void* neo_create(int first_run, int targets_atom, const char** perr)
 {
     // initialize X threads (required for xcb)
     if (first_run && XInitThreads() == False) {
@@ -153,7 +153,7 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
         x->f_rdy[ix_sel] = 0;
         client_message(x, neo_ready, sel);
 
-        // wait upto 1 second
+        // wait upto one second
         struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
         while (!x->f_rdy[ix_sel]
