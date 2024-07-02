@@ -93,9 +93,9 @@ has the following fields.
   This method sets or resets |g:clipboard| variable activating the plugin.
   Usually, you want to call |neoclip:setup()| only. >
 
-  : " deactivate plugin temporarily
+  : " disable clipboard temporarily
   :lua neoclip:register(false)
-  : " activate it back
+  : " bring it back
   :lua neoclip:register()
 <
 							      |neoclip:setup()|

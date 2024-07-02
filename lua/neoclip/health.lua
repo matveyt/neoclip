@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 26
+    Last Change:    2024 Jul 02
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -18,23 +18,30 @@ local function neo_check()
 
     h.start"neoclip"
 
+    if vim.fn.has"clipboard" == 0 then
+        h.error("Clipboard provider is disabled", {
+            "Registers + and * will not work",
+        })
+        return
+    end
+
     if not neoclip then
         h.error("Not found", {
             "Do you |require()| it?",
             "Refer to |neoclip-build| on how to build from source code",
-            "OS Windows, macOS and *nix (with X11 or Wayland) are supported"
+            "OS Windows, macOS and *nix (with X11 or Wayland) are supported",
         })
         return
     end
 
     if not neoclip.driver then
         h.error("No driver module loaded", neoclip.issues or {
-            "Have you run |neoclip:setup()|?"
+            "Have you run |neoclip:setup()|?",
         })
         return
     end
 
-    if vim.g.clipboard and vim.g.clipboard.name == neoclip.driver.id() then
+    if neoclip.driver.id() == vim.fn["provider#clipboard#Executable"]() then
         h.ok(string.format("*%s* driver is in use", neoclip.driver.id()))
 
         local display = nil
@@ -47,17 +54,17 @@ local function neo_check()
             h.info(string.format("Running on display `%s`", display))
         end
     else
-        h.error(string.format("*%s* driver is loaded but not registered",
+        h.warn(string.format("*%s* driver is loaded but not properly registered",
             neoclip.driver.id()), {
             "Do not install another clipboard provider",
             "Check list of issues",
-            "Try |neoclip:register()|"
+            "Try |neoclip:register()|",
         })
     end
 
     if not neoclip.driver.status() then
         h.warn("Driver module stopped", {
-            "|neoclip.driver.start()| to restart"
+            "|neoclip.driver.start()| to restart",
         })
     end
 
@@ -65,22 +72,46 @@ local function neo_check()
         h.warn("Found issues", neoclip.issues)
     end
 
-    local plus, star = vim.fn.getreginfo"+", vim.fn.getreginfo"*"
-    neoclip.driver.set("+", { "На дворе трава" }, "b")
-    neoclip.driver.set("*", { "На траве дрова" }, "b")
-    local test_data = vim.fn.getreginfo"+"
-    vim.fn.setreg("+", plus)
-    vim.fn.setreg("*", star)
+    local reg_plus, reg_star = vim.fn.getreginfo"+", vim.fn.getreginfo"*"
+    local line_plus, line_star = "На дворе трава", "На траве дрова"
+    local now = tostring(vim.fn.localtime())
 
-    if test_data.regtype ~= "\x1626" or #test_data.regcontents ~= 1 then
-        h.error"Clipboard test failed"
-    elseif test_data.regcontents[1] == "На дворе трава" then
+    if not neoclip.driver.set("+", { now, line_plus }, "b") then
+        h.warn"Driver failed to set register +"
+    end
+    if not neoclip.driver.set("*", { now, line_star }, "b") then
+        h.warn"Driver failed to set register *"
+    end
+
+    -- for "cache_enabled" providers
+    vim.cmd"sleep 200m"
+
+    local test_plus = vim.fn.getreginfo"+"
+    vim.fn.setreg("+", reg_plus)
+    vim.fn.setreg("*", reg_star)
+
+    if #test_plus.regcontents == 2 and test_plus.regcontents[1] == now and
+        (test_plus.regcontents[2] == line_plus or test_plus.regcontents[2] == line_star)
+        then
         h.ok"Clipboard test passed"
-    elseif test_data.regcontents[1] == "На траве дрова" then
-        h.ok"Clipboard test passed"
-        h.info"NOTE registers + and * are always equal"
+
+        if test_plus.regcontents[2] == line_star then
+            h.info"NOTE registers + and * are always equal"
+        end
+
+        assert(#line_plus == #line_star and #line_plus >= #now)
+        if test_plus.regtype ~= "\22" .. #line_plus then
+            h.warn(string.format("Block type has been changed to %q", test_plus.regtype),
+            {
+                string.format("It looks like %s does not support Vim's native blocks",
+                    vim.fn["provider#clipboard#Executable"]()),
+            })
+        end
     else
-        h.error"Clipboard test failed"
+        h.error("Clipboard test failed", {
+            "Sometimes, this happens because of `cache_enabled` setting",
+            "Repeat |:checkhealth| again before reporting a bug",
+        })
     end
 end
 

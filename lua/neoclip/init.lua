@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jun 25
+    Last Change:    2024 Jul 01
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -10,14 +10,14 @@ neoclip = {
     -- driver = require"neoclip.XYZ"
     -- issues = {"array", "of", "strings"}
     --
-    -- issue(format, args)
+    -- issue(format, ...)
     -- require(driver_name)
-    -- register(true_by_default)
+    -- register(...)
     -- setup(driver_name_or_nil)
 }
 
-function neoclip:issue(...)
-    self.issues[#self.issues + 1] = string.format(...)
+function neoclip:issue(format, ...)
+    self.issues[#self.issues + 1] = string.format(format, ...)
 end
 
 function neoclip:require(driver_name)
@@ -40,11 +40,20 @@ function neoclip:require(driver_name)
     return status
 end
 
-function neoclip:register(arg)
-    if arg ~= false then
+function neoclip:register(...)
+    if select("#", ...) > 0 then
+        -- any argument, including nil, to set g:clipboard directly
+        vim.g.clipboard = select(1, ...)
+        vim.cmd[[
+            if exists("#neoclip")
+                autocmd! neoclip
+                augroup! neoclip
+            endif
+        ]]
+    else
         -- catch driver load failure
         assert(self.driver, "neoclip driver error (:checkhealth for info)")
-        -- set g:clipboard
+        -- setup g:clipboard
         vim.g.clipboard = {
             name = self.driver.id(),
             copy = {
@@ -71,15 +80,6 @@ function neoclip:register(arg)
                 augroup end
             ]]
         end
-    else
-        -- default clipboard
-        vim.g.clipboard = nil
-        vim.cmd[[
-            if exists("#neoclip")
-                autocmd! neoclip
-                augroup! neoclip
-            endif
-        ]]
     end
 
     -- reload provider
@@ -108,6 +108,8 @@ function neoclip:setup(driver_name)
         -- Wayland first, fallback to X11
         local _ = vim.env.WAYLAND_DISPLAY and self:require"neoclip.wl"
             or self:require"neoclip.x11"
+    else
+        self:issue"Unsupported platform"
     end
 
     -- doesn't work with WSL

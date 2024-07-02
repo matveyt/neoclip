@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 24
+ * Last Change:  2024 Jul 01
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -63,7 +63,7 @@ int neo_get(lua_State* L)
         255,        // type
         INT_MAX,    // ACP len
         INT_MAX,    // UCS len
-        0           // Raw len
+        0,          // Raw len
     };
     HANDLE hData, hBuf = NULL;
     LPVOID pBuf;
