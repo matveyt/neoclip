@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 01
+    Last Change:    2024 Jul 05
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -10,47 +10,38 @@ neoclip = {
     -- driver = require"neoclip.XYZ"
     -- issues = {"array", "of", "strings"}
     --
-    -- issue(format, ...)
-    -- require(driver_name)
-    -- register(...)
-    -- setup(driver_name_or_nil)
+    -- issue(fmt, ...)
+    -- require(driver)
+    -- register([clipboard])
+    -- setup([driver])
 }
 
-function neoclip:issue(format, ...)
-    self.issues[#self.issues + 1] = string.format(format, ...)
+function neoclip:issue(fmt, ...)
+    self.issues[#self.issues + 1] = fmt:format(...)
 end
 
-function neoclip:require(driver_name)
+function neoclip:require(driver)
     local status, result1, result2
 
-    status, result1 = pcall(require, driver_name)
+    status, result1 = pcall(require, driver)
     if status then
         status, result2 = pcall(result1.start)
         if status then
             self.driver = result1
         else
-            self:issue("'%s' failed to start", driver_name)
+            self:issue("'%s' failed to start", driver)
             self:issue("%s", result2)
         end
     else
-        self:issue("'%s' failed to load", driver_name)
+        self:issue("'%s' failed to load", driver)
         self:issue("%s", result1)
     end
 
     return status
 end
 
-function neoclip:register(...)
-    if select("#", ...) > 0 then
-        -- any argument, including nil, to set g:clipboard directly
-        vim.g.clipboard = select(1, ...)
-        vim.cmd[[
-            if exists("#neoclip")
-                autocmd! neoclip
-                augroup! neoclip
-            endif
-        ]]
-    else
+function neoclip:register(clipboard)
+    if clipboard == nil then
         -- catch driver load failure
         assert(self.driver, "neoclip driver error (:checkhealth for info)")
         -- setup g:clipboard
@@ -67,7 +58,7 @@ function neoclip:register(...)
         }
         -- create autocmds
         if vim.api.nvim_create_augroup then
-            local group = vim.api.nvim_create_augroup("neoclip", { clear = true })
+            local group = vim.api.nvim_create_augroup("neoclip", { clear=true })
             vim.api.nvim_create_autocmd("VimSuspend", { group=group,
                 callback=self.driver.stop })
             vim.api.nvim_create_autocmd("VimResume", { group=group,
@@ -80,6 +71,16 @@ function neoclip:register(...)
                 augroup end
             ]]
         end
+    else
+        assert(type(clipboard) == "table", "table or nil expected")
+        vim.g.clipboard = clipboard.copy and clipboard.paste and clipboard
+            or clipboard[1] -- neoclip:register{false}
+        vim.cmd[[
+            if exists("#neoclip")
+                autocmd! neoclip
+                augroup! neoclip
+            endif
+        ]]
     end
 
     -- reload provider
@@ -89,7 +90,7 @@ function neoclip:register(...)
     end
 end
 
-function neoclip:setup(driver_name)
+function neoclip:setup(driver)
     -- local helper
     local has = function(feat) return vim.fn.has(feat) == 1 end
 
@@ -98,8 +99,8 @@ function neoclip:setup(driver_name)
     self.issues = {}
 
     -- load driver
-    if driver_name then
-        self:require(driver_name)
+    if driver then
+        self:require(driver)
     elseif has"win32" then
         self:require"neoclip.w32"
     elseif has"mac" then

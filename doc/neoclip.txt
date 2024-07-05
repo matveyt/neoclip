@@ -85,7 +85,6 @@ has the following fields.
   need it as |neoclip:setup()| calls it for you. >
 
   " force loading of X11 module only
-  lua require"neoclip"
   lua neoclip:require"neoclip.x11"
   lua neoclip:register()
 <
@@ -93,15 +92,19 @@ has the following fields.
   This method sets or resets |g:clipboard| variable activating the plugin.
   Usually, you want to call |neoclip:setup()| only. >
 
-  : " disable clipboard temporarily
-  :lua neoclip:register(false)
-  : " bring it back
-  :lua neoclip:register()
+  " disable clipboard temporarily
+  lua neoclip:register{false}
+
+  " set default Neovim clipboard
+  lua neoclip:register{}
+
+  " get neoclip back
+  lua neoclip:register()
 <
 							      |neoclip:setup()|
-  This is the only method you need to add to your |config|. It is more or less
+  This is the only method you need to add to your |config|. Basically, it is
   an equivalent of |neoclip:require()| followed by |neoclip:register()|.
-  Optionally, it accepts the binary driver name to pass to |neoclip:require()|. >
+  Optionally, it accepts driver name to pass to |neoclip:require()|. >
 
   " add this line to your config
   lua require"neoclip":setup()
