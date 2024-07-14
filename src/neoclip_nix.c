@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 24
+ * Last Change:  2024 Jul 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -16,11 +16,7 @@ static void* X = NULL;
 
 // module registration for Lua 5.1
 __attribute__((visibility("default")))
-#if (PLATFORM_Type == PLATFORM_X11)
-int luaopen_neoclip_x11(lua_State* L)
-#elif (PLATFORM_Type == PLATFORM_Wayland)
-int luaopen_neoclip_wl(lua_State* L)
-#endif
+int luaopen_driver(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
@@ -31,6 +27,12 @@ int luaopen_neoclip_wl(lua_State* L)
         { "set", neo_set },
         { NULL, NULL }
     };
+
+    // setup ID from module name
+    lua_pushcfunction(L, neo_id);
+    lua_pushvalue(L, 1);
+    lua_call(L, 1, 0);
+
     lua_newtable(L);
     luaL_register(L, NULL, methods);
     return 1;
@@ -39,11 +41,7 @@ int luaopen_neoclip_wl(lua_State* L)
 
 // library cleanup
 __attribute__((destructor))
-#if (PLATFORM_Type == PLATFORM_X11)
-void luaclose_neoclip_x11(void)
-#elif (PLATFORM_Type == PLATFORM_Wayland)
-void luaclose_neoclip_wl(void)
-#endif
+void luaclose_driver(void)
 {
     neo_kill(X);
 }

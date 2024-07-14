@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 25
+ * Last Change:  2024 Jul 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -8,6 +8,8 @@
 
 #include "neoclip.h"
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 // convert v/V/^V to MCHAR/MLINE/MBLOCK
@@ -136,10 +138,43 @@ int neo_true(lua_State* L)
 }
 
 
-// return ID string
+// get ID string
 int neo_id(lua_State* L)
 {
-    lua_pushliteral(L, "neoclip/" _STRINGIZE(PLATFORM));
+    static char* platform = NULL;
+
+    // set ID
+    if (lua_isstring(L, 1)) {
+        free(platform);
+
+        // name = string.match(arg[1], "%.?(%w+)-")
+        lua_getglobal(L, "string");
+        lua_getfield(L, -1, "match");
+        lua_pushvalue(L, 1);
+        lua_pushliteral(L, "%.?(%w+)-");
+        lua_call(L, 2, 1);
+        const char* name = lua_tostring(L, -1);
+
+        if (name == NULL) {
+            platform = NULL;
+        } else {
+            // translate name
+            if (!strcmp(name, "w32"))
+                name = "WinAPI";
+            else if (!strcmp(name, "mac"))
+                name = "AppKit";
+            else if (!strcmp(name, "wl"))
+                name = "Wayland";
+            else if (!strcmp(name, "x11"))
+                name = "X11";
+
+            platform = strdup(name);
+        }
+
+        lua_pop(L, 2);  // name + string global
+    }
+
+    lua_pushfstring(L, "neoclip/%s", platform ? platform : "Unknown");
     return 1;
 }
 
@@ -147,12 +182,10 @@ int neo_id(lua_State* L)
 // get vim.g[var] as integer
 int neo_vimg(lua_State* L, const char* var, int dflt)
 {
-    int value;
-
     lua_getglobal(L, "vim");
     lua_getfield(L, -1, "g");
     lua_getfield(L, -1, var);
-    value = lua_isnil(L, -1) ? dflt
+    int value = lua_isnil(L, -1) ? dflt
         : lua_isboolean(L, -1) ? lua_toboolean(L, -1)
         : lua_tointeger(L, -1);
     lua_pop(L, 3);

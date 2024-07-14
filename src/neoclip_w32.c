@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jul 01
+ * Last Change:  2024 Jul 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -24,7 +24,7 @@ static UINT g_uVimMeta, g_uVimRaw;
 
 // module registration for Lua 5.1
 __declspec(dllexport)
-int luaopen_neoclip_w32(lua_State* L)
+int luaopen_driver(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
@@ -36,10 +36,16 @@ int luaopen_neoclip_w32(lua_State* L)
         { NULL, NULL }
     };
 
+    // register Vim clipboard formats
     g_uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
     g_uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
     if (!g_uVimMeta || !g_uVimRaw)
         return luaL_error(L, "RegisterClipboardFormat failed");
+
+    // setup ID from module name
+    lua_pushcfunction(L, neo_id);
+    lua_pushvalue(L, 1);
+    lua_call(L, 1, 0);
 
     lua_newtable(L);
     luaL_register(L, NULL, methods);

@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Jul 01
+# Last Change:  2024 Jul 14
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -19,35 +19,32 @@ name_suffix = []
 
 
 if host_machine.system() == 'windows'
-  # neoclip.w32
-  target1 = 'w32'
+  # w32-driver
+  target1 = 'w32-driver'
   sources1 = ['neoclip_w32.c', 'neo_common.c']
-  c_args1 = '-DPLATFORM=WinAPI'
 
 elif host_machine.system() == 'darwin'
   appkit = dependency('AppKit', method : 'extraframework')
   add_languages('objc')
-  # neoclip.mac
-  target1 = 'mac'
+  # mac-driver
+  target1 = 'mac-driver'
   sources1 = ['neoclip_mac.m', 'neo_common.c']
-  c_args1 = '-DPLATFORM=AppKit'
   deps1 += appkit
   name_suffix = 'so'
 
 else # *nix
   x11 = dependency('X11')
   threads = dependency('threads')
-  # neoclip.x11
-  target1 = 'x11'
+  # x11-driver
+  target1 = 'x11-driver'
   sources1 = ['neoclip_nix.c', 'neo_x11.c', 'neo_common.c']
-  c_args1 = '-DPLATFORM=X11'
   deps1 += [x11, threads]
 
   # try finding Wayland
   wl_client = dependency('wayland-client', required : false)
   wlr_data_control_xml = 'extra/wlr-data-control-unstable-v1.xml'
 
-  # this needs meson.version() >= 0.62.0
+  # 'unstable-wayland' requires meson.version() >= 0.62.0
   # for now we keep using custom_target() instead
   # wlr_data_control =
   #   import('unstable-wayland').scan_xml(wlr_data_control_xml).to_list()
@@ -65,23 +62,22 @@ else # *nix
   endif
 
   if wl_client.found() and is_variable('wlr_data_control')
-    # neoclip.wl
-    target2 = 'wl'
+    # wl-driver
+    target2 = 'wl-driver'
     sources2 = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c'] + wlr_data_control
-    c_args2 = '-DPLATFORM=Wayland'
     deps2 += [wl_client, threads]
   endif
 endif
 
 
 if is_variable('target1')
-  shared_module(target1, sources1, c_args : c_args1, dependencies : deps1,
-    gnu_symbol_visibility : 'internal', name_prefix : '', name_suffix : name_suffix,
-    install : true, install_dir : 'lua/neoclip')
+  shared_module(target1, sources1, dependencies : deps1,
+    gnu_symbol_visibility : 'internal', install : true, install_dir : 'lua/neoclip',
+    name_prefix : '', name_suffix : name_suffix)
 endif
 
 if is_variable('target2')
-  shared_module(target2, sources2, c_args : c_args2, dependencies : deps2,
-    gnu_symbol_visibility : 'internal', name_prefix : '', name_suffix : name_suffix,
-    install : true, install_dir : 'lua/neoclip')
+  shared_module(target2, sources2, dependencies : deps2,
+    gnu_symbol_visibility : 'internal', install : true, install_dir : 'lua/neoclip',
+    name_prefix : '', name_suffix : name_suffix)
 endif

@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 02
+    Last Change:    2024 Jul 14
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -15,11 +15,10 @@ function(neo_module name)
     if(NOT name)
         return()
     endif()
-    cmake_parse_arguments(NEO "" "PLATFORM" "SOURCES;INCLUDE_DIRS;LIBRARIES" ${ARGN})
+    cmake_parse_arguments(NEO "" "" "SOURCES;INCLUDE_DIRS;LIBRARIES" ${ARGN})
     add_library(${name} MODULE ${NEO_SOURCES})
     set_property(TARGET ${name} PROPERTY C_STANDARD "99")
-    target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS}
-        "PLATFORM=${NEO_PLATFORM}")
+    target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS})
     target_include_directories(${name} PRIVATE ${LUA_INCLUDE_DIRS} ${NEO_INCLUDE_DIRS})
     target_link_libraries(${name} ${LUA_LIBRARIES} ${NEO_LIBRARIES})
     install(TARGETS ${name} DESTINATION "lua/neoclip" PERMISSIONS OWNER_READ OWNER_WRITE)
@@ -56,25 +55,22 @@ find_library(LUA_LIBRARIES PATHS "${PC_LUAJIT_LIBDIR}"
 
 
 if(WIN32)
-    # neoclip.w32
-    set(target1 "w32")
-    set(platform1 "WinAPI")
+    # w32-driver
+    set(target1 "w32-driver")
     set(sources1 "neoclip_w32.c" "neo_common.c")
 
 elseif(APPLE)
     find_library(APPKIT_LIBRARIES AppKit REQUIRED)
-    # neoclip.mac
-    set(target1 "mac")
-    set(platform1 "AppKit")
+    # mac-driver
+    set(target1 "mac-driver")
     set(sources1 "neoclip_mac.m" "neo_common.c")
     set(libraries1 ${APPKIT_LIBRARIES})
 
 elseif(UNIX)
     find_library(X11_LIBRARIES X11 REQUIRED)
     find_package(Threads)
-    # neoclip.x11
-    set(target1 "x11")
-    set(platform1 "X11")
+    # x11-driver
+    set(target1 "x11-driver")
     set(sources1 "neoclip_nix.c" "neo_x11.c" "neo_common.c")
     set(libraries1 ${X11_LIBRARIES} "${CMAKE_THREADS_LIB_INIT}")
 
@@ -84,9 +80,8 @@ elseif(UNIX)
     if(Wayland_FOUND AND WaylandScanner_FOUND)
         ecm_add_wayland_client_protocol(wlr_data_control BASENAME "wlr-data-control"
             PROTOCOL "extra/wlr-data-control-unstable-v1.xml")
-        # neoclip.wl
-        set(target2 "wl")
-        set(platform2 "Wayland")
+        # wl-driver
+        set(target2 "wl-driver")
         set(sources2 "neoclip_nix.c" "neo_wayland.c" "neo_common.c" ${wlr_data_control})
         set(include_dirs2 "${CMAKE_CURRENT_BINARY_DIR}")
         set(libraries2 ${Wayland_LIBRARIES} "${CMAKE_THREADS_LIB_INIT}")
@@ -94,8 +89,8 @@ elseif(UNIX)
 endif()
 
 
-neo_module("${target1}" PLATFORM ${platform1} SOURCES ${sources1}
-    INCLUDE_DIRS ${include_dirs1} LIBRARIES ${libraries1})
+neo_module("${target1}" SOURCES ${sources1} INCLUDE_DIRS ${include_dirs1}
+    LIBRARIES ${libraries1})
 
-neo_module("${target2}" PLATFORM ${platform2} SOURCES ${sources2}
-    INCLUDE_DIRS ${include_dirs2} LIBRARIES ${libraries2})
+neo_module("${target2}" SOURCES ${sources2} INCLUDE_DIRS ${include_dirs2}
+    LIBRARIES ${libraries2})

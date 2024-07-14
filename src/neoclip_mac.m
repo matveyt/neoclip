@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 24
+ * Last Change:  2024 Jul 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -16,7 +16,7 @@ static NSString* VimPboardType = @"VimPboardType";
 
 // module registration for Lua 5.1
 __attribute__((visibility("default")))
-int luaopen_neoclip_mac(lua_State* L)
+int luaopen_driver(lua_State* L)
 {
     static struct luaL_Reg const methods[] = {
         { "id", neo_id },
@@ -27,6 +27,12 @@ int luaopen_neoclip_mac(lua_State* L)
         { "set", neo_set },
         { NULL, NULL }
     };
+
+    // setup ID from module name
+    lua_pushcfunction(L, neo_id);
+    lua_pushvalue(L, 1);
+    lua_call(L, 1, 0);
+
     lua_newtable(L);
     luaL_register(L, NULL, methods);
     return 1;

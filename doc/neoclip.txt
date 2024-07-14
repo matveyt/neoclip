@@ -84,8 +84,8 @@ has the following fields.
   This method loads binary module into |neoclip.driver| variable. You seldom
   need it as |neoclip:setup()| calls it for you. >
 
-  " force loading of X11 module only
-  lua neoclip:require"neoclip.x11"
+  " force loading of X11 driver only
+  lua neoclip:require"neoclip.x11-driver"
   lua neoclip:register()
 <
 							   |neoclip:register()|
