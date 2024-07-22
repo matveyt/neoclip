@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 14
+    Last Change:    2024 Jul 19
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -8,6 +8,17 @@
 
 cmake_minimum_required(VERSION 3.16)
 project(neoclip DESCRIPTION "Neovim clipboard provider" LANGUAGES C)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/..")
+set(CMAKE_SHARED_MODULE_PREFIX "")
+set(CMAKE_C_VISIBILITY_PRESET "internal")
+if(APPLE)
+    enable_language(OBJC)
+    set(CMAKE_OBJC_VISIBILITY_PRESET "internal")
+endif()
 
 
 # create/install target with Lua dependency
@@ -25,26 +36,11 @@ function(neo_module name)
 endfunction()
 
 
-# set few CMAKE_XXX variables
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE "release")
-endif()
-set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/..")
-set(CMAKE_SHARED_MODULE_PREFIX "")
-set(CMAKE_C_VISIBILITY_PRESET "internal")
-if(APPLE)
-    enable_language(OBJC)
-    set(CMAKE_OBJC_VISIBILITY_PRESET "internal")
-endif()
-
-
 # pkg-config
 find_package(PkgConfig REQUIRED)
-
 # Extra CMake Modules
 find_package(ECM QUIET)
 list(APPEND CMAKE_MODULE_PATH "${ECM_MODULE_PATH}")
-
 # Lua(JIT)
 pkg_check_modules(PC_LUAJIT REQUIRED luajit)
 set(LUA_DEFINITIONS "${PC_LUAJIT_CFLAGS_OTHER}")
@@ -87,7 +83,6 @@ elseif(UNIX)
         set(libraries2 ${Wayland_LIBRARIES} "${CMAKE_THREADS_LIB_INIT}")
     endif()
 endif()
-
 
 neo_module("${target1}" SOURCES ${sources1} INCLUDE_DIRS ${include_dirs1}
     LIBRARIES ${libraries1})

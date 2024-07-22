@@ -1,15 +1,15 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Jul 14
+# Last Change:  2024 Jul 18
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
 
 
-project('neoclip', 'c', license : 'Unlicense', meson_version: '>=0.56.0',
-  default_options : ['b_ndebug=if-release', 'buildtype=release', 'c_std=c99',
-    'install_umask=0177', 'prefix=' + meson.project_source_root() / '..', 'strip=true',
-    'warning_level=3', 'werror=true'])
+project('neoclip', 'c', license : 'Unlicense', meson_version : '>=0.56.0',
+  default_options : ['buildtype=release', 'c_std=c99', 'install_umask=0177',
+    'prefix=' + meson.project_source_root() / '..', 'strip=true', 'warning_level=3',
+    'werror=true'])
 
 
 lua = dependency('luajit')
@@ -68,7 +68,6 @@ else # *nix
     deps2 += [wl_client, threads]
   endif
 endif
-
 
 if is_variable('target1')
   shared_module(target1, sources1, dependencies : deps1,
