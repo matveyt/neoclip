@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 26
+ * Last Change:  2024 Aug 08
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -19,8 +19,10 @@
 typedef struct {
     Display* d;                 // X Display
     Window w;                   // X Window
-    Time delta;                 // msec between X server startup and Unix epoch
-    Atom atom[total];           // X Atoms
+    Time delta;                 // X server startup time (ms from Unix epoch)
+    Atom atom[total];           // X Atoms list
+    Atom notify_targets;        // response type for TARGETS (ATOM or TARGETS)
+                                // see https://www.edwardrosten.com/code/x11.html
     unsigned char* data[2];     // Selection: _VIMENC_TEXT
     size_t cb[2];               // Selection: text size only
     Time stamp[2];              // Selection: time stamp
@@ -45,11 +47,6 @@ static void to_multiple(neo_X* x, int ix_sel, XSelectionEvent* xse);
 static void to_property(neo_X* x, int ix_sel, Window w, Atom property, Atom type);
 
 
-// should response for TARGETS have the type of ATOM or TARGETS?!
-// see https://www.edwardrosten.com/code/x11.html
-static int notify_targets = atom;
-
-
 // init context and start thread
 void* neo_create(int first_run, int targets_atom, const char** perr)
 {
@@ -58,9 +55,6 @@ void* neo_create(int first_run, int targets_atom, const char** perr)
         *perr = "XInitThreads failed";
         return NULL;
     }
-
-    // should response for TARGETS have the type of ATOM or TARGETS?!
-    notify_targets = targets_atom ? atom : targets;
 
     // try to open display
     Display* d = XOpenDisplay(NULL);
@@ -103,6 +97,7 @@ void* neo_create(int first_run, int targets_atom, const char** perr)
     x->d = d;
     x->w = XCreateSimpleWindow(d, DefaultRootWindow(d), 0, 0, 1, 1, 0, 0, 0);
     XInternAtoms(d, atom_name, total, 0, x->atom);
+    x->notify_targets = targets_atom ? x->atom[atom] : x->atom[targets];
     XSetWMProtocols(d, x->w, &x->atom[wm_dele], 1);
     pthread_cond_init(&x->c_rdy[0], NULL);
     pthread_cond_init(&x->c_rdy[1], NULL);
@@ -368,7 +363,7 @@ static Bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
             // refuse request for non-matching timestamp
             xse.property = None;
         } else if (xse.target == x->atom[targets]) {
-            xse.target = x->atom[notify_targets];
+            xse.target = x->notify_targets;
             XChangeProperty(x->d, xse.requestor, xse.property, xse.target, 32,
                 PropModeReplace, (unsigned char*)&x->atom[targets], total - targets);
         } else if (xse.target == x->atom[dele] || xse.target == x->atom[save]) {
