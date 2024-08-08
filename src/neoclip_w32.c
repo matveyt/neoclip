@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jul 27
+ * Last Change:  2024 Aug 08
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -11,15 +11,18 @@
 #include <windows.h>
 
 
+// userdata
+typedef struct {
+    UINT uVimMeta;
+    UINT uVimRaw;
+} UD;
+
+
 // forward prototypes
 static HANDLE get_and_lock(UINT uFormat, LPVOID ppData, size_t* pcbMax);
 static BOOL unlock_and_set(UINT uFormat, HANDLE hData);
 static HANDLE mb2wc(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch);
 static HANDLE wc2mb(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch);
-
-
-// Vim compatible clipboard format
-static UINT g_uVimMeta, g_uVimRaw;
 
 
 // module registration
@@ -36,22 +39,23 @@ int luaopen_driver(lua_State* L)
         { NULL, NULL }
     };
 
-    // register Vim clipboard formats
-    g_uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
-    g_uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
-    if (!g_uVimMeta || !g_uVimRaw)
-        return luaL_error(L, "RegisterClipboardFormat failed");
-
-    // setup ID from module name
-    lua_pushcfunction(L, neo_id);
-    lua_pushvalue(L, 1);
-    lua_call(L, 1, 0);
-
-#if defined(luaL_newlib)
-    luaL_newlib(L, methods);
+    lua_pushvalue(L, 1);                        // upvalue 1: module name
+    UD* ud = lua_newuserdata(L, sizeof(UD));    // upvalue 2: userdata
+    ud->uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
+    ud->uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
+    // metatable for userdata
+    luaL_newmetatable(L, lua_tostring(L, 1));
+    //lua_pushcfunction(L, neo__gc);
+    //lua_setfield(L, -2, "__gc");
+    lua_setmetatable(L, -2);
+#if defined(luaL_newlibtable)
+    luaL_newlibtable(L, methods);
+    lua_insert(L, -3);  // move table before upvalues
+    luaL_setfuncs(L, methods, 2);
 #else
     lua_createtable(L, 0, sizeof(methods) / sizeof(methods[0]) - 1);
-    luaL_register(L, NULL, methods);
+    lua_insert(L, -3);  // move table before upvalues
+    luaL_openlib(L, NULL, methods, 2);
 #endif
     return 1;
 }
@@ -62,8 +66,9 @@ int luaopen_driver(lua_State* L)
 int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
+    UD* ud = neo_ud(L);
 
-    // table to return
+    // a table to return
     lua_newtable(L);
     if (!OpenClipboard(NULL))
         return 1;
@@ -78,7 +83,7 @@ int neo_get(lua_State* L)
     HANDLE hData, hBuf = NULL;
     LPVOID pBuf;
     size_t count = sizeof(meta);
-    if ((hData = get_and_lock(g_uVimMeta, &pBuf, &count)) != NULL) {
+    if ((hData = get_and_lock(ud->uVimMeta, &pBuf, &count)) != NULL) {
         memcpy(meta, pBuf, count & ~(sizeof(int) - 1));
         GlobalUnlock(hData);
         hData = NULL;
@@ -87,7 +92,7 @@ int neo_get(lua_State* L)
     do {
         // VimRawBytes
         if ((count = meta[3]) >= sizeof("utf-8")
-            && (hData = get_and_lock(g_uVimRaw, &pBuf, &count)) != NULL) {
+            && (hData = get_and_lock(ud->uVimRaw, &pBuf, &count)) != NULL) {
             if (count >= sizeof("utf-8") && !memcmp(pBuf, "utf-8", sizeof("utf-8"))) {
                 *(LPSTR*)&pBuf += sizeof("utf-8");
                 count -= sizeof("utf-8");
@@ -136,6 +141,7 @@ int neo_set(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
+    UD* ud = neo_ud(L);
 
     BOOL bSuccess = OpenClipboard(NULL);
 
@@ -161,7 +167,7 @@ int neo_set(lua_State* L)
         pBuf = GlobalLock(hBuf);
         memcpy(pBuf, "utf-8", sizeof("utf-8"));                 // NUL terminated
         memcpy((LPSTR)pBuf + sizeof("utf-8"), pSrc, cchSrc);    // NUL terminated
-        bSuccess = unlock_and_set(g_uVimRaw, hBuf) && bSuccess;
+        bSuccess = unlock_and_set(ud->uVimRaw, hBuf) && bSuccess;
 
         // VimClipboard2
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof(int) * 4);
@@ -170,9 +176,8 @@ int neo_set(lua_State* L)
         *pMeta++ = cchACP ? cchACP - 1 : 0;         // ACP len
         *pMeta++ = cchUCS ? cchUCS - 1 : 0;         // UCS len
         *pMeta   = sizeof("utf-8") + cchSrc - 1;    // Raw len
-        bSuccess = unlock_and_set(g_uVimMeta, hBuf) && bSuccess;
+        bSuccess = unlock_and_set(ud->uVimMeta, hBuf) && bSuccess;
 
-        lua_pop(L, 1);
         CloseClipboard();
     }
 

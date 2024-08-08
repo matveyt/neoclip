@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 13
+    Last Change:    2024 Aug 07
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -31,6 +31,7 @@ function neoclip:require(driver)
         else
             self:issue("'%s' failed to start", driver)
             self:issue("%s", result2)
+            _G.package.loaded[driver] = nil
         end
     else
         self:issue("'%s' failed to load", driver)

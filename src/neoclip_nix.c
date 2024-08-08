@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jul 27
+ * Last Change:  2024 Aug 08
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -10,8 +10,11 @@
 #include "neoclip_nix.h"
 
 
-// global context
-static void* X = NULL;
+// userdata
+typedef struct {
+    int first_run;
+    void* X;
+} UD;
 
 
 // module registration
@@ -28,63 +31,72 @@ int luaopen_driver(lua_State* L)
         { NULL, NULL }
     };
 
-    // setup ID from module name
-    lua_pushcfunction(L, neo_id);
-    lua_pushvalue(L, 1);
-    lua_call(L, 1, 0);
-
-#if defined(luaL_newlib)
-    luaL_newlib(L, methods);
+    lua_pushvalue(L, 1);                        // upvalue 1: module name
+    UD* ud = lua_newuserdata(L, sizeof(UD));    // upvalue 2: userdata
+    ud->first_run = 1;
+    ud->X = NULL;
+    // metatable for userdata
+    luaL_newmetatable(L, lua_tostring(L, 1));
+    lua_pushcfunction(L, neo__gc);
+    lua_setfield(L, -2, "__gc");
+    lua_setmetatable(L, -2);
+#if defined(luaL_newlibtable)
+    luaL_newlibtable(L, methods);
+    lua_insert(L, -3);  // move table before upvalues
+    luaL_setfuncs(L, methods, 2);
 #else
     lua_createtable(L, 0, sizeof(methods) / sizeof(methods[0]) - 1);
-    luaL_register(L, NULL, methods);
+    lua_insert(L, -3);  // move table before upvalues
+    luaL_openlib(L, NULL, methods, 2);
 #endif
     return 1;
-}
-
-
-// library cleanup
-__attribute__((destructor))
-void luaclose_driver(void)
-{
-    neo_kill(X);
 }
 
 
 // run X thread
 int neo_start(lua_State* L)
 {
-    if (X == NULL) {
-        static int first_run = 1;
-        int targets_atom = neo_vimg(L, "neoclip_targets_atom", 1);
+    UD* ud = neo_ud(L);
+
+    if (ud->X == NULL) {
         const char* err;
+        ud->X = neo_create(ud->first_run, neo_vimg(L, "neoclip_targets_atom", 1),
+            &err);
 
-        X = neo_create(first_run, targets_atom, &err);
-        first_run = 0;
+        if (ud->first_run)
+            ud->first_run = 0;
 
-        if (X == NULL)
+        if (ud->X == NULL)
             return luaL_error(L, err);
     }
 
-    lua_pushnil(L);
-    return 1;
+    return neo_nil(L);
 }
 
 
 // stop X thread
 int neo_stop(lua_State* L)
 {
-    neo_kill(X);
-    X = NULL;
-    lua_pushnil(L);
-    return 1;
+    UD* ud = neo_ud(L);
+    neo_kill(ud->X);
+    ud->X = NULL;
+    return neo_nil(L);
+}
+
+
+// garbage collect: also stop X thread
+int neo__gc(lua_State* L)
+{
+    UD* ud = lua_touserdata(L, 1);
+    neo_kill(ud->X);
+    return 0;
 }
 
 
 // is X thread running?
 int neo_status(lua_State* L)
 {
-    lua_pushboolean(L, X != NULL);
+    lua_pushboolean(L, neo_ud(L)->X != NULL);
     return 1;
 }
 
@@ -95,19 +107,20 @@ int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     int sel = *lua_tostring(L, 1) == '*' ? prim : clip;
+    UD* ud = neo_ud(L);
 
-    // table to return
+    // a table to return
     lua_newtable(L);
 
     // query selection data
-    if (X != NULL) {
+    if (ud->X != NULL) {
         size_t cb;
         int type;
-        const void* buf = neo_fetch(X, sel, &cb, &type);
+        const void* buf = neo_fetch(ud->X, sel, &cb, &type);
 
         if (buf != NULL) {
             neo_split(L, lua_gettop(L), buf, cb, type);
-            neo_lock(X, 0);
+            neo_lock(ud->X, 0);
         }
     }
 
@@ -125,20 +138,18 @@ int neo_set(lua_State* L)
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
     int sel = *lua_tostring(L, 1) == '*' ? prim : clip;
     int type = neo_type(*lua_tostring(L, 3));
+    UD* ud = neo_ud(L);
 
     // change selection data
-    if (X != NULL) {
+    if (ud->X != NULL) {
         neo_join(L, 2, "\n");
-
         // get user data
         size_t cb;
         const char* ptr = lua_tolstring(L, -1, &cb);
-
         // owned
-        neo_own(X, 1, sel, ptr, cb, type);
-        lua_pop(L, 1);
+        neo_own(ud->X, 1, sel, ptr, cb, type);
     }
 
-    lua_pushboolean(L, X != NULL);
+    lua_pushboolean(L, ud->X != NULL);
     return 1;
 }

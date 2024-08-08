@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jul 27
+ * Last Change:  2024 Aug 08
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -28,16 +28,14 @@ int luaopen_driver(lua_State* L)
         { NULL, NULL }
     };
 
-    // setup ID from module name
-    lua_pushcfunction(L, neo_id);
-    lua_pushvalue(L, 1);
-    lua_call(L, 1, 0);
-
-#if defined(luaL_newlib)
-    luaL_newlib(L, methods);
+#if defined(luaL_newlibtable)
+    luaL_newlibtable(L, methods);
+    lua_pushvalue(L, 1);    // upvalue 1: module name
+    luaL_setfuncs(L, methods, 1);
 #else
     lua_createtable(L, 0, sizeof(methods) / sizeof(methods[0]) - 1);
-    luaL_register(L, NULL, methods);
+    lua_pushvalue(L, 1);    // upvalue 1: module name
+    luaL_openlib(L, NULL, methods, 1);
 #endif
     return 1;
 }
@@ -49,7 +47,7 @@ int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
 
-    // table to return
+    // a table to return
     lua_newtable(L);
 
     // check supported types
@@ -115,7 +113,6 @@ int neo_set(lua_State* L)
 
     // cleanup
     [str release];
-    lua_pop(L, 1);
 
     lua_pushboolean(L, success);
     return 1;
