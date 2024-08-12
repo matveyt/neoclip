@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Aug 07
+    Last Change:    2024 Aug 12
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -17,6 +17,7 @@ neoclip = {
 }
 
 function neoclip:issue(fmt, ...)
+    self.issues = self.issues or {nil}  -- pre-allocate slot
     self.issues[#self.issues + 1] = fmt:format(...)
 end
 

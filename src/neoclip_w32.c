@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 08
+ * Last Change:  2024 Aug 12
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,8 +13,8 @@
 
 // userdata
 typedef struct {
-    UINT uVimMeta;
-    UINT uVimRaw;
+    UINT uVimMeta, uVimRaw; // Vim clipboard format
+    UINT uOEMCP, uACP;      // OEM/ANSI code page
 } UD;
 
 
@@ -43,11 +43,17 @@ int luaopen_driver(lua_State* L)
     UD* ud = lua_newuserdata(L, sizeof(UD));    // upvalue 2: userdata
     ud->uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
     ud->uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
+    GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IDEFAULTCODEPAGE
+        | LOCALE_RETURN_NUMBER, (WCHAR*)&ud->uOEMCP, sizeof(UINT) / sizeof(WCHAR));
+    GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE
+        | LOCALE_RETURN_NUMBER, (WCHAR*)&ud->uACP, sizeof(UINT) / sizeof(WCHAR));
+
     // metatable for userdata
     luaL_newmetatable(L, lua_tostring(L, 1));
     //lua_pushcfunction(L, neo__gc);
     //lua_setfield(L, -2, "__gc");
     lua_setmetatable(L, -2);
+
 #if defined(luaL_newlibtable)
     luaL_newlibtable(L, methods);
     lua_insert(L, -3);  // move table before upvalues
@@ -61,15 +67,14 @@ int luaopen_driver(lua_State* L)
 }
 
 
-// neoclip.get(regname) -> [lines, regtype]
-// read from system clipboard
+// neoclip.driver.get(regname) => [lines, regtype]
 int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     UD* ud = neo_ud(L);
 
     // a table to return
-    lua_newtable(L);
+    lua_createtable(L, 2, 0);
     if (!OpenClipboard(NULL))
         return 1;
 
@@ -80,13 +85,15 @@ int neo_get(lua_State* L)
         INT_MAX,    // UCS len
         0,          // Raw len
     };
-    HANDLE hData, hBuf = NULL;
+    HANDLE hBuf = NULL;
     LPVOID pBuf;
     size_t count = sizeof(meta);
+    HANDLE hData;
     if ((hData = get_and_lock(ud->uVimMeta, &pBuf, &count)) != NULL) {
         memcpy(meta, pBuf, count & ~(sizeof(int) - 1));
         GlobalUnlock(hData);
         hData = NULL;
+        pBuf = NULL;
     }
 
     do {
@@ -100,6 +107,7 @@ int neo_get(lua_State* L)
             }
             GlobalUnlock(hData);
             hData = NULL;
+            pBuf = NULL;
         }
 
         // CF_UNICODETEXT
@@ -112,30 +120,30 @@ int neo_get(lua_State* L)
         // CF_TEXT
         if ((count = meta[1]) > 0
             && (hData = get_and_lock(CF_TEXT, &pBuf, &count)) != NULL) {
-            HANDLE hTemp = mb2wc(CP_ACP, pBuf, count, &pBuf, &count);
-            hBuf = wc2mb(CP_UTF8, pBuf, count, &pBuf, &count);
-            GlobalUnlock(hTemp);
-            GlobalFree(hTemp);
+            HANDLE hTemp = mb2wc(ud->uACP, pBuf, count, &pBuf, &count);
+            if (hTemp != NULL) {
+                hBuf = wc2mb(CP_UTF8, pBuf, count, &pBuf, &count);
+                GlobalUnlock(hTemp);
+                GlobalFree(hTemp);
+            }
             break;
         }
     } while (0);
 
     if (hData != NULL) {
-        // note: pBuf may contain trailing NUL but neo_split() will take care of it
-        neo_split(L, lua_gettop(L), pBuf, count, meta[0]);
+        // note: pBuf may contain trailing NUL
+        if (pBuf != NULL)
+            neo_split(L, lua_gettop(L), pBuf, count, meta[0]);
+        if (hBuf != NULL)
+            GlobalUnlock(hBuf), GlobalFree(hBuf);
         GlobalUnlock(hData);
-        if (hBuf != NULL) {
-            GlobalUnlock(hBuf);
-            GlobalFree(hBuf);
-        }
     }
     CloseClipboard();
     return 1;
 }
 
 
-// neoclip.set(regname, lines, regtype) -> boolean
-// write to system clipboard
+// neoclip.driver.set(regname, lines, regtype) => boolean
 int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
@@ -144,38 +152,46 @@ int neo_set(lua_State* L)
     UD* ud = neo_ud(L);
 
     BOOL bSuccess = OpenClipboard(NULL);
-
     if (bSuccess) {
         EmptyClipboard();
         neo_join(L, 2, "\r\n");
 
         // get UTF-8
-        size_t cchSrc;
+        size_t cchACP = 0;
+        size_t cchUCS, cchSrc;
         LPCSTR pSrc = lua_tolstring(L, -1, &cchSrc); ++cchSrc;
         HANDLE hBuf;
         LPVOID pBuf;
 
-        // CF_UNICODETEXT + CF_TEXT
-        size_t cchUCS, cchACP;
+        // CF_UNICODETEXT
         hBuf = mb2wc(CP_UTF8, pSrc, (int)cchSrc, &pBuf, &cchUCS);
-        bSuccess = unlock_and_set(CF_TEXT,
-            wc2mb(CP_ACP, pBuf, cchUCS, &(LPVOID){NULL}, &cchACP));
+        if (hBuf != NULL) {
+            // CF_OEMTEXT + CF_TEXT
+            unlock_and_set(CF_OEMTEXT,
+                wc2mb(ud->uOEMCP, pBuf, cchUCS, &(LPVOID){NULL}, &cchACP));
+            unlock_and_set(CF_TEXT,
+                wc2mb(ud->uACP, pBuf, cchUCS, &(LPVOID){NULL}, &cchACP));
+        }
         bSuccess = unlock_and_set(CF_UNICODETEXT, hBuf) && bSuccess;
 
         // VimRawBytes
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof("utf-8") + cchSrc);
-        pBuf = GlobalLock(hBuf);
-        memcpy(pBuf, "utf-8", sizeof("utf-8"));                 // NUL terminated
-        memcpy((LPSTR)pBuf + sizeof("utf-8"), pSrc, cchSrc);    // NUL terminated
+        if (hBuf != NULL) {
+            pBuf = GlobalLock(hBuf);
+            memcpy(pBuf, "utf-8", sizeof("utf-8"));                 // NUL terminated
+            memcpy((LPSTR)pBuf + sizeof("utf-8"), pSrc, cchSrc);    // NUL terminated
+        }
         bSuccess = unlock_and_set(ud->uVimRaw, hBuf) && bSuccess;
 
         // VimClipboard2
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof(int) * 4);
-        int* pMeta = GlobalLock(hBuf);
-        *pMeta++ = neo_type(*lua_tostring(L, 3));   // type
-        *pMeta++ = cchACP ? cchACP - 1 : 0;         // ACP len
-        *pMeta++ = cchUCS ? cchUCS - 1 : 0;         // UCS len
-        *pMeta   = sizeof("utf-8") + cchSrc - 1;    // Raw len
+        if (hBuf != NULL) {
+            int* pMeta = GlobalLock(hBuf);
+            *pMeta++ = neo_type(*lua_tostring(L, 3));   // type
+            *pMeta++ = cchACP ? cchACP - 1 : INT_MAX;   // ACP len
+            *pMeta++ = cchUCS ? cchUCS - 1 : INT_MAX;   // UCS len
+            *pMeta   = sizeof("utf-8") + cchSrc - 1;    // Raw len
+        }
         bSuccess = unlock_and_set(ud->uVimMeta, hBuf) && bSuccess;
 
         CloseClipboard();
@@ -206,12 +222,16 @@ static HANDLE get_and_lock(UINT uFormat, LPVOID ppData, size_t* pcbMax)
 // safe set clipboard data
 static BOOL unlock_and_set(UINT uFormat, HANDLE hData)
 {
-    GlobalUnlock(hData);
-    if (SetClipboardData(uFormat, hData) == NULL) {
-        GlobalFree(hData);
+    if (hData == NULL || GlobalUnlock(hData) != 0)
         return FALSE;
-    }
-    return TRUE;
+
+    DWORD dwError = GetLastError();
+    if ((dwError == NO_ERROR || dwError == ERROR_NOT_LOCKED)
+        && SetClipboardData(uFormat, hData) != NULL)
+        return TRUE;
+
+    GlobalFree(hData);
+    return FALSE;
 }
 
 
@@ -219,10 +239,15 @@ static BOOL unlock_and_set(UINT uFormat, HANDLE hData)
 static HANDLE mb2wc(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch)
 {
     int cchDst = MultiByteToWideChar(cp, 0, pSrc, (int)cchSrc, NULL, 0);
-    HANDLE hBuf = GlobalAlloc(GMEM_MOVEABLE, cchDst ? sizeof(WCHAR) * cchDst : 1);
-    *(LPVOID*)ppDst = GlobalLock(hBuf);
-    *pcch = (size_t)MultiByteToWideChar(cp, 0, pSrc, (int)cchSrc, *(LPVOID*)ppDst,
-        cchDst);
+    HANDLE hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof(WCHAR) * cchDst);
+    if (hBuf != NULL) {
+        *(LPVOID*)ppDst = GlobalLock(hBuf);
+        *pcch = (size_t)MultiByteToWideChar(cp, 0, pSrc, (int)cchSrc, *(LPVOID*)ppDst,
+            cchDst);
+    } else {
+        *(LPVOID*)ppDst = NULL;
+        *pcch = 0;
+    }
     return hBuf;
 }
 
@@ -231,9 +256,14 @@ static HANDLE mb2wc(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* 
 static HANDLE wc2mb(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch)
 {
     int cchDst = WideCharToMultiByte(cp, 0, pSrc, (int)cchSrc, NULL, 0, NULL, NULL);
-    HANDLE hBuf = GlobalAlloc(GMEM_MOVEABLE, cchDst ? cchDst : 1);
-    *(LPVOID*)ppDst = GlobalLock(hBuf);
-    *pcch = (size_t)WideCharToMultiByte(cp, 0, pSrc, (int)cchSrc, *(LPVOID*)ppDst,
-        cchDst, NULL, NULL);
+    HANDLE hBuf = GlobalAlloc(GMEM_MOVEABLE, cchDst);
+    if (hBuf != NULL) {
+        *(LPVOID*)ppDst = GlobalLock(hBuf);
+        *pcch = (size_t)WideCharToMultiByte(cp, 0, pSrc, (int)cchSrc, *(LPVOID*)ppDst,
+            cchDst, NULL, NULL);
+    } else {
+        *(LPVOID*)ppDst = NULL;
+        *pcch = 0;
+    }
     return hBuf;
 }

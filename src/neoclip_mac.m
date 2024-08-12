@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 08
+ * Last Change:  2024 Aug 12
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -41,14 +41,13 @@ int luaopen_driver(lua_State* L)
 }
 
 
-// get selection
-// neoclip.get(regname) -> [lines, regtype]
+// neoclip.driver.get(regname) => [lines, regtype]
 int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
 
     // a table to return
-    lua_newtable(L);
+    lua_createtable(L, 2, 0);
 
     // check supported types
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
@@ -83,8 +82,7 @@ int neo_get(lua_State* L)
 }
 
 
-// set selection
-// neoclip.set(regname, lines, regtype) -> boolean
+// neoclip.driver.set(regname, lines, regtype) => boolean
 int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Jun 26
+ * Last Change:  2024 Aug 11
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -10,6 +10,7 @@
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -40,16 +41,16 @@ static void data_control_source_cancelled(void* X,
 
 
 // simplify Wayland listeners declaration
-#define COUNT(obj) (int)(sizeof(obj) / sizeof(obj[0]))
-#define INDEX(ix) INDEX##ix
-#define LISTEN \
-    static struct { \
-        const int count; \
-        void* impl; \
+#define COUNTOF(o) (int)(sizeof(o) / sizeof(o[0]))
+#define INDEX(ix) INDEX_##ix
+#define LISTEN              \
+    struct {                \
+        const int count;    \
+        void* pimpl;        \
     } _listen[] =
-#define OBJECT(obj, ix) [ix] = { \
-    .count = sizeof(struct obj##_listener) / sizeof(void(*)(void)), \
-    .impl = &(struct obj##_listener)
+#define OBJECT(o, ix) [ix] = {                                      \
+    .count = sizeof(struct o##_listener) / sizeof(LISTENER_FUNC),   \
+    .pimpl = &(struct o##_listener)
 
 
 enum {
@@ -59,9 +60,10 @@ enum {
     INDEX(source_prim),
     INDEX(source_clip),
 };
+typedef void (*LISTENER_FUNC)(void);
 
 
-LISTEN {
+static LISTEN {
     OBJECT(wl_registry, INDEX(registry)) {
         .global = registry_global,
     }},
@@ -85,19 +87,20 @@ LISTEN {
 };
 
 
+// As Wayland segfaults on NULL listener we must provide stubs. Dirt!
 static void _nop(void) {}
 static inline void listen_init(void)
 {
-    for (int i = 0; i < COUNT(_listen); ++i)
+    for (int i = 0; i < COUNTOF(_listen); ++i)
         for (int j = 0; j < _listen[i].count; ++j)
-            if (((void(**)(void))_listen[i].impl)[j] == NULL)
-                ((void(**)(void))_listen[i].impl)[j] = _nop;
+            if (((LISTENER_FUNC*)_listen[i].pimpl)[j] == NULL)
+                ((LISTENER_FUNC*)_listen[i].pimpl)[j] = _nop;
 }
 
 
-static inline int listen_to(void* object, int index, void* data)
+static inline int listen_to(void* object, int i, void* data)
 {
-    return wl_proxy_add_listener(object, _listen[index].impl, data);
+    return wl_proxy_add_listener(object, _listen[i].pimpl, data);
 }
 
 
@@ -107,8 +110,8 @@ typedef struct {
     struct wl_seat* seat;                       // Wayland seat
     struct zwlr_data_control_manager_v1* dcm;   // wlroots data control manager
     struct zwlr_data_control_device_v1* dcd;    // wlroots data control device
-    unsigned char* data[2];                     // Selection: _VIMENC_TEXT
-    size_t cb[2];                               // Selection: text size only
+    unsigned char* data[sel_total];             // Selection: _VIMENC_TEXT
+    size_t cb[sel_total];                       // Selection: text size only
     pthread_mutex_t lock;                       // Mutex lock
     pthread_t tid;                              // Thread ID
 } neo_W;
@@ -128,6 +131,7 @@ static const char* mime[] = {
 
 // forward prototypes
 static void* thread_main(void* X);
+static size_t alloc_data(neo_W* w, int sel, size_t cb);
 static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer);
 static void sel_write(neo_W* w, int sel, const char* mime_type, int fd);
 static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
@@ -135,30 +139,34 @@ static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
 
 
 // init context and start thread
-void* neo_create(int first_run, int targets_atom, const char** perr)
+void* neo_create(bool first_run, bool targets_atom, const char** perr)
 {
     (void)first_run;    // unused
     (void)targets_atom; // unused
 
-    // try to open display first
-    struct wl_display* d = wl_display_connect(NULL);
-    if (d == NULL) {
-        *perr = "wl_display_connect failed";
+    // create context
+    neo_W* w = calloc(1, sizeof(neo_W));
+    if (w == NULL) {
+        *perr = "Memory allocation error";
         return NULL;
     }
 
-    // context
-    neo_W* w = calloc(1, sizeof(neo_W));
-    w->d = d;
+    // try to open display
+    w->d = wl_display_connect(NULL);
+    if (w->d == NULL) {
+        free(w);
+        *perr = "wl_display_connect failed";
+        return NULL;
+    }
     listen_init();
 
     // read globals from registry
-    struct wl_registry* reg = wl_display_get_registry(d);
+    struct wl_registry* reg = wl_display_get_registry(w->d);
     listen_to(reg, INDEX(registry), w);
-    wl_display_roundtrip(d);
+    wl_display_roundtrip(w->d);
     wl_registry_destroy(reg);
     if (w->seat == NULL || w->dcm == NULL) {
-        wl_display_disconnect(d);
+        wl_display_disconnect(w->d);
         free(w);
         *perr = "no support for wlr-data-control protocol";
         return NULL;
@@ -195,30 +203,30 @@ void neo_kill(void* X)
 
 
 // lock or unlock selection data
-int neo_lock(void* X, int lock)
+bool neo_lock(void* X, bool lock)
 {
     neo_W* w = (neo_W*)X;
-    return lock ? pthread_mutex_lock(&w->lock) : pthread_mutex_unlock(&w->lock);
+    int error = lock ? pthread_mutex_lock(&w->lock) : pthread_mutex_unlock(&w->lock);
+    return (error == 0);
 }
 
 
 // fetch new selection
-// note: caller must unlock unless NULL is returned
+// note: caller must unlock a pointer returned unless it is NULL
 const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
 {
-    if (!neo_lock(X, 1)) {
+    if (neo_lock(X, true)) {
         neo_W* w = (neo_W*)X;
-        int ix_sel = (sel == prim) ? 0 : 1;
 
         // wlr_data_control_device should've informed us of a new selection
-        if (w->cb[ix_sel] > 0) {
-            *pcb = w->cb[ix_sel];
-            *ptype = w->data[ix_sel][0];
-            return (w->data[ix_sel] + 1 + sizeof("utf-8"));
+        if (w->cb[sel] > 0) {
+            *pcb = w->cb[sel];
+            *ptype = w->data[sel][0];
+            return (w->data[sel] + 1 + sizeof("utf-8"));
         }
 
         // unlock if clipboard is empty
-        neo_lock(X, 0);
+        neo_lock(X, false);
     }
 
     return NULL;
@@ -226,38 +234,43 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
 
 
 // own new selection
-void neo_own(void* X, int offer, int sel, const void* ptr, size_t cb, int type)
+// (cb == 0) => empty selection, (cb == SIZE_MAX) => keep selection
+void neo_own(void* X, bool offer, int sel, const void* ptr, size_t cb, int type)
 {
-    if (!neo_lock(X, 1)) {
+    if (neo_lock(X, true)) {
         neo_W* w = (neo_W*)X;
-        int ix_sel = (sel == prim) ? 0 : 1;
 
-        // _VIMENC_TEXT: type 'encoding' NUL text
-        w->data[ix_sel] = realloc(w->data[ix_sel], cb ? 1 + sizeof("utf-8") + cb : 0);
-        w->cb[ix_sel] = cb;
-        if (cb) {
-            w->data[ix_sel][0] = type;
-            memcpy(w->data[ix_sel] + 1, "utf-8", sizeof("utf-8"));
-            memcpy(w->data[ix_sel] + 1 + sizeof("utf-8"), ptr, cb);
+        // set new data
+        if (cb < SIZE_MAX) {
+            // _VIMENC_TEXT: type 'encoding' NUL text
+            cb = alloc_data(w, sel, cb);
+            if (cb > 0) {
+                w->data[sel][0] = type;
+                memcpy(w->data[sel] + 1, "utf-8", sizeof("utf-8"));
+                memcpy(w->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
+            }
         }
 
         if (offer) {
             // offer our selection
             struct zwlr_data_control_source_v1* dcs =
                 zwlr_data_control_manager_v1_create_data_source(w->dcm);
-            for (int i = 0; i < COUNT(mime); ++i)
+            for (int i = 0; i < COUNTOF(mime); ++i)
                 zwlr_data_control_source_v1_offer(dcs, mime[i]);
-            if (sel == prim) {
+            switch (sel) {
+            case sel_prim:
                 listen_to(dcs, INDEX(source_prim), w);
                 zwlr_data_control_device_v1_set_primary_selection(w->dcd, dcs);
-            } else {
+            break;
+            case sel_clip:
                 listen_to(dcs, INDEX(source_clip), w);
                 zwlr_data_control_device_v1_set_selection(w->dcd, dcs);
+            break;
             }
             wl_display_flush(w->d);
         }
 
-        neo_lock(X, 0);
+        neo_lock(X, false);
     }
 }
 
@@ -274,8 +287,8 @@ static void* thread_main(void* X)
     pthread_sigmask(SIG_BLOCK, &mask, NULL);
 
     struct pollfd fds[2] = {
-        { .fd = wl_display_get_fd(w->d), .events = POLLIN },
-        { .fd = signalfd(-1, &mask, 0), .events = POLLIN },
+        { .fd = wl_display_get_fd(w->d), .events = POLLIN, },
+        { .fd = signalfd(-1, &mask, 0), .events = POLLIN, },
     };
 
     for (;;) {
@@ -308,23 +321,43 @@ static void* thread_main(void* X)
 }
 
 
+// (re-)allocate data buffer for selection
+// Note: caller must acquire neo_lock() first
+static size_t alloc_data(neo_W* w, int sel, size_t cb)
+{
+    if (cb) {
+        void* ptr = realloc(w->data[sel], 1 + sizeof("utf-8") + cb);
+        if (ptr != NULL) {
+            w->data[sel] = ptr;
+            w->cb[sel] = cb;
+        }
+    } else {
+        free(w->data[sel]);
+        w->data[sel] = NULL;
+        w->cb[sel] = 0;
+    }
+
+    return w->cb[sel];
+}
+
+
 // wl_registry::global
 static void registry_global(void* X, struct wl_registry* registry, uint32_t name,
     const char* interface, uint32_t version)
 {
     neo_W* w = (neo_W*)X;
     struct {
-        void** pobj;
+        void** pobject;
         const struct wl_interface* iface;
     } globl[] = {
         { (void**)&w->seat, &wl_seat_interface },
         { (void**)&w->dcm, &zwlr_data_control_manager_v1_interface },
     };
 
-    for (int i = 0; i < COUNT(globl); ++i) {
+    for (int i = 0; i < COUNTOF(globl); ++i) {
         if (!strcmp(interface, globl[i].iface->name)) {
-            if (*globl[i].pobj == NULL)
-                *globl[i].pobj = wl_registry_bind(registry, name, globl[i].iface,
+            if (*globl[i].pobject == NULL)
+                *globl[i].pobject = wl_registry_bind(registry, name, globl[i].iface,
                     version);
             break;
         }
@@ -339,9 +372,7 @@ static void data_control_device_data_offer(void* X,
     (void)X;    // unused
     (void)dcd;  // unused
 
-    int* best_mime = malloc(sizeof(int));
-    *best_mime = COUNT(mime);
-    listen_to(offer, INDEX(offer), best_mime);
+    listen_to(offer, INDEX(offer), (void*)(intptr_t)COUNTOF(mime));
 }
 
 
@@ -350,7 +381,7 @@ static void data_control_device_primary_selection(void* X,
     struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer)
 {
     (void)dcd;  // unused
-    sel_read((neo_W*)X, prim, offer);
+    sel_read((neo_W*)X, sel_prim, offer);
 }
 
 
@@ -359,7 +390,7 @@ static void data_control_device_selection(void* X,
     struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer)
 {
     (void)dcd;  // unused
-    sel_read((neo_W*)X, clip, offer);
+    sel_read((neo_W*)X, sel_clip, offer);
 }
 
 
@@ -381,16 +412,16 @@ static void data_control_device_finished(void* X,
 static void data_control_offer_offer(void* X, struct zwlr_data_control_offer_v1* offer,
     const char* mime_type)
 {
-    (void)offer;    // unused
+    (void)X;    // unused
 
-    int best = *(int*)X;
+    int best = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
     for (int i = 0; i < best; ++i) {
         if (!strcmp(mime_type, mime[i])) {
             best = i;
             break;
         }
     }
-    *(int*)X = best;
+    wl_proxy_set_user_data((struct wl_proxy*)offer, (void*)(intptr_t)best);
 }
 
 
@@ -399,7 +430,7 @@ static void data_control_source_send_prim(void* X,
     struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd)
 {
     (void)dcs;   // unused
-    sel_write((neo_W*)X, prim, mime_type, fd);
+    sel_write((neo_W*)X, sel_prim, mime_type, fd);
 }
 
 
@@ -408,7 +439,7 @@ static void data_control_source_send_clip(void* X,
     struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd)
 {
     (void)dcs;   // unused
-    sel_write((neo_W*)X, clip, mime_type, fd);
+    sel_write((neo_W*)X, sel_clip, mime_type, fd);
 }
 
 
@@ -425,20 +456,20 @@ static void data_control_source_cancelled(void* X,
 static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer)
 {
     if (offer == NULL) {
-        neo_own(w, 0, sel, NULL, 0, 0);
+        neo_own(w, false, sel, NULL, 0, 0);
         return;
     }
 
-    int* best_mime = wl_proxy_get_user_data((struct wl_proxy*)offer);
-    if (best_mime != NULL && *best_mime >= 0 && *best_mime < COUNT(mime)) {
+    int best_mime = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
+    if (best_mime >= 0 && best_mime < COUNTOF(mime)) {
         size_t cb;
-        unsigned char* ptr = offer_read(w, offer, mime[*best_mime], &cb);
-        int type = (cb && *best_mime <= 1) ? ptr[0] : 255;
+        unsigned char* ptr = offer_read(w, offer, mime[best_mime], &cb);
+        int type = (cb > 0 && best_mime <= 1) ? ptr[0] : 255;
 
-        void *data = ptr;
-        if (!cb) {
+        void* data = ptr;
+        if (cb == 0) {
             // nothing to do
-        } else if (*best_mime == 0) {
+        } else if (best_mime == 0) {
             // _VIMENC_TEXT
             if (cb >= 1 + sizeof("utf-8")
                 && !memcmp(ptr + 1, "utf-8", sizeof("utf-8"))) {
@@ -450,17 +481,16 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
                 free(ptr);
                 data = ptr = offer_read(w, offer, "UTF8_STRING", &cb);
             }
-        } else if (*best_mime == 1) {
+        } else if (best_mime == 1) {
             // _VIM_TEXT
             data = ptr + 1;
             --cb;
         }
 
-        neo_own(w, 0, sel, data, cb, type);
+        neo_own(w, false, sel, data, cb, type);
         free(ptr);
     }
 
-    free(best_mime);
     zwlr_data_control_offer_v1_destroy(offer);
 }
 
@@ -470,12 +500,10 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
 #pragma GCC diagnostic ignored "-Wunused-result"
 static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 {
-    int ix_sel = (sel == prim) ? 0 : 1;
-
-    if (!neo_lock(w, 1)) {
+    if (neo_lock(w, true)) {
         // assume _VIMENC_TEXT
-        unsigned char* buf = w->data[ix_sel];
-        size_t cb = 1 + sizeof("utf-8") + w->cb[ix_sel];
+        unsigned char* buf = w->data[sel];
+        size_t cb = 1 + sizeof("utf-8") + w->cb[sel];
 
         // not _VIMENC_TEXT?
         if (strcmp(mime_type, mime[0])) {
@@ -490,7 +518,7 @@ static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 
         // output selection
         (void)write(fd, buf, cb);
-        neo_lock(w, 0);
+        neo_lock(w, false);
     }
 
     close(fd);
@@ -512,13 +540,18 @@ static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
         close(fds[1]);
 
         void* buf = malloc(256 * 1024);
-        ssize_t part;
-        while ((part = read(fds[0], buf, 256 * 1024)) > 0) {
-            ptr = realloc(ptr, total + part);
-            memcpy((char*)ptr + total, buf, part);
-            total += part;
+        if (buf != NULL) {
+            ssize_t part;
+            while ((part = read(fds[0], buf, 256 * 1024)) > 0) {
+                void* ptr2 = realloc(ptr, total + part);
+                if (ptr2 == NULL)
+                    break;
+                ptr = ptr2;
+                memcpy((char*)ptr + total, buf, part);
+                total += part;
+            }
+            free(buf);
         }
-        free(buf);
         close(fds[0]);
     }
 
