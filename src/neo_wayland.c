@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 11
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -10,7 +10,6 @@
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -110,7 +109,7 @@ typedef struct {
     struct wl_seat* seat;                       // Wayland seat
     struct zwlr_data_control_manager_v1* dcm;   // wlroots data control manager
     struct zwlr_data_control_device_v1* dcd;    // wlroots data control device
-    unsigned char* data[sel_total];             // Selection: _VIMENC_TEXT
+    uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
     size_t cb[sel_total];                       // Selection: text size only
     pthread_mutex_t lock;                       // Mutex lock
     pthread_t tid;                              // Thread ID
@@ -325,7 +324,7 @@ static void* thread_main(void* X)
 // Note: caller must acquire neo_lock() first
 static size_t alloc_data(neo_W* w, int sel, size_t cb)
 {
-    if (cb) {
+    if (cb > 0) {
         void* ptr = realloc(w->data[sel], 1 + sizeof("utf-8") + cb);
         if (ptr != NULL) {
             w->data[sel] = ptr;
@@ -355,7 +354,7 @@ static void registry_global(void* X, struct wl_registry* registry, uint32_t name
     };
 
     for (int i = 0; i < COUNTOF(globl); ++i) {
-        if (!strcmp(interface, globl[i].iface->name)) {
+        if (strcmp(interface, globl[i].iface->name) == 0) {
             if (*globl[i].pobject == NULL)
                 *globl[i].pobject = wl_registry_bind(registry, name, globl[i].iface,
                     version);
@@ -416,7 +415,7 @@ static void data_control_offer_offer(void* X, struct zwlr_data_control_offer_v1*
 
     int best = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
     for (int i = 0; i < best; ++i) {
-        if (!strcmp(mime_type, mime[i])) {
+        if (strcmp(mime_type, mime[i]) == 0) {
             best = i;
             break;
         }
@@ -463,7 +462,7 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
     int best_mime = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
     if (best_mime >= 0 && best_mime < COUNTOF(mime)) {
         size_t cb;
-        unsigned char* ptr = offer_read(w, offer, mime[best_mime], &cb);
+        uint8_t* ptr = offer_read(w, offer, mime[best_mime], &cb);
         int type = (cb > 0 && best_mime <= 1) ? ptr[0] : 255;
 
         void* data = ptr;
@@ -472,7 +471,7 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
         } else if (best_mime == 0) {
             // _VIMENC_TEXT
             if (cb >= 1 + sizeof("utf-8")
-                && !memcmp(ptr + 1, "utf-8", sizeof("utf-8"))) {
+                && memcmp(ptr + 1, "utf-8", sizeof("utf-8")) == 0) {
                 // this is UTF-8
                 data = ptr + 1 + sizeof("utf-8");
                 cb -= 1 + sizeof("utf-8");
@@ -496,20 +495,19 @@ static void sel_read(neo_W* w, int sel, struct zwlr_data_control_offer_v1* offer
 
 
 // write selection data to file descriptor
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-result"
 static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
 {
     if (neo_lock(w, true)) {
         // assume _VIMENC_TEXT
-        unsigned char* buf = w->data[sel];
+        uint8_t* buf = w->data[sel];
         size_t cb = 1 + sizeof("utf-8") + w->cb[sel];
+        ssize_t n = 1;
 
         // not _VIMENC_TEXT?
-        if (strcmp(mime_type, mime[0])) {
+        if (strcmp(mime_type, mime[0]) != 0) {
             // _VIM_TEXT: output type
-            if (!strcmp(mime_type, mime[1]))
-                (void)write(fd, buf, 1);
+            if (strcmp(mime_type, mime[1]) == 0)
+                n = write(fd, buf, 1);
 
             // skip over header
             buf += 1 + sizeof("utf-8");
@@ -517,37 +515,37 @@ static void sel_write(neo_W* w, int sel, const char* mime_type, int fd)
         }
 
         // output selection
-        (void)write(fd, buf, cb);
+        if (n > 0)
+            n = write(fd, buf, cb);
         neo_lock(w, false);
     }
 
     close(fd);
 }
-#pragma GCC diagnostic pop
 
 
 // read specific mime type from offer
 static void* offer_read(neo_W* w, struct zwlr_data_control_offer_v1* offer,
     const char* mime, size_t* pcb)
 {
-    void* ptr = NULL;
+    uint8_t* ptr = NULL;
     size_t total = 0;
     int fds[2];
 
-    if (!pipe(fds)) {
+    if (pipe(fds) == 0) {
         zwlr_data_control_offer_v1_receive(offer, mime, fds[1]);
         wl_display_roundtrip(w->d);
         close(fds[1]);
 
-        void* buf = malloc(256 * 1024);
+        void* buf = malloc(32 * 1024);
         if (buf != NULL) {
             ssize_t part;
-            while ((part = read(fds[0], buf, 256 * 1024)) > 0) {
+            while ((part = read(fds[0], buf, 32 * 1024)) > 0) {
                 void* ptr2 = realloc(ptr, total + part);
                 if (ptr2 == NULL)
                     break;
                 ptr = ptr2;
-                memcpy((char*)ptr + total, buf, part);
+                memcpy(ptr + total, buf, part);
                 total += part;
             }
             free(buf);

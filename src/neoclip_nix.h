@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 11
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,17 +9,17 @@
 #ifndef NEOCLIP_NIX_H
 #define NEOCLIP_NIX_H
 
-
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 
+// selection index
 enum {
     sel_prim,
     sel_clip,
     sel_total
 };
-
 
 void* neo_create(bool first_run, bool targets_atom, const char** perr);
 void neo_kill(void* X);

@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 19
+    Last Change:    2024 Aug 13
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -12,9 +12,15 @@ project(neoclip DESCRIPTION "Neovim clipboard provider" LANGUAGES C)
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
+set(CMAKE_C_STANDARD "99")
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_VISIBILITY_PRESET "internal")
 set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/..")
 set(CMAKE_SHARED_MODULE_PREFIX "")
-set(CMAKE_C_VISIBILITY_PRESET "internal")
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
 if(APPLE)
     enable_language(OBJC)
     set(CMAKE_OBJC_VISIBILITY_PRESET "internal")
@@ -28,7 +34,6 @@ function(neo_module name)
     endif()
     cmake_parse_arguments(NEO "" "" "SOURCES;INCLUDE_DIRS;LIBRARIES" ${ARGN})
     add_library(${name} MODULE ${NEO_SOURCES})
-    set_property(TARGET ${name} PROPERTY C_STANDARD "99")
     target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS})
     target_include_directories(${name} PRIVATE ${LUA_INCLUDE_DIRS} ${NEO_INCLUDE_DIRS})
     target_link_libraries(${name} ${LUA_LIBRARIES} ${NEO_LIBRARIES})

@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 12
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -100,7 +100,8 @@ int neo_get(lua_State* L)
         // VimRawBytes
         if ((count = meta[3]) >= sizeof("utf-8")
             && (hData = get_and_lock(ud->uVimRaw, &pBuf, &count)) != NULL) {
-            if (count >= sizeof("utf-8") && !memcmp(pBuf, "utf-8", sizeof("utf-8"))) {
+            if (count >= sizeof("utf-8")
+                && memcmp(pBuf, "utf-8", sizeof("utf-8")) == 0) {
                 *(LPSTR*)&pBuf += sizeof("utf-8");
                 count -= sizeof("utf-8");
                 break;

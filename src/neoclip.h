@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 12
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,9 +9,9 @@
 #ifndef NEOCLIP_H
 #define NEOCLIP_H
 
-
 #include <lua.h>
 #include <lauxlib.h>
+
 
 // shared upvalues
 #define neo_pushname(L) lua_pushvalue((L), lua_upvalueindex(1))

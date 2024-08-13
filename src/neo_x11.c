@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 12
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,42 +9,42 @@
 #include "neoclip_nix.h"
 #include <limits.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
 
-// atoms
+// X11 atoms
 enum {
-    prim,       // PRIMARY
-    clip,       // CLIPBOARD
-    atom,       // ATOM
-    atom_pair,  // ATOM_PAIR
-    clipman,    // CLIPBOARD_MANAGER
-    incr,       // INCR
-    integer,    // INTEGER
-    null,       // NULL
-    wm_proto,   // WM_PROTOCOLS
-    wm_dele,    // WM_DELETE_WINDOW
-    neo_ready,  // NEO_READY
-    neo_offer,  // NEO_OFFER
-    // valid targets
-    targets,    // TARGETS
-    dele,       // DELETE
-    multi,      // MULTIPLE
-    save,       // SAVE_TARGETS
-    timestamp,  // TIMESTAMP
+    prim,           // PRIMARY
+    clip,           // CLIPBOARD
+    atom,           // ATOM
+    atom_pair,      // ATOM_PAIR
+    clipman,        // CLIPBOARD_MANAGER
+    incr,           // INCR
+    integer,        // INTEGER
+    null,           // NULL
+    wm_proto,       // WM_PROTOCOLS
+    wm_dele,        // WM_DELETE_WINDOW
+    neo_ready,      // NEO_READY
+    neo_offer,      // NEO_OFFER
+    // supported targets
+    targets,        // TARGETS
+    dele,           // DELETE
+    multi,          // MULTIPLE
+    save,           // SAVE_TARGETS
+    timestamp,      // TIMESTAMP
     // encodings from best to worst
-    vimenc,     // _VIMENC_TEXT
-    vimtext,    // _VIM_TEXT
-    plain_utf8, // text/plain;charset=utf-8
-    utf8,       // UTF8_STRING
-    plain,      // text/plain
-    compound,   // COMPOUND_TEXT
-    string,     // STRING
-    text,       // TEXT
+    vimenc,         // _VIMENC_TEXT
+    vimtext,        // _VIM_TEXT
+    plain_utf8,     // text/plain;charset=utf-8
+    utf8_string,    // UTF8_STRING
+    plain,          // text/plain
+    compound,       // COMPOUND_TEXT
+    string,         // STRING
+    text,           // TEXT
     // total count
     total
 };
@@ -65,7 +65,7 @@ typedef struct {
     Atom atom[total];       // X Atoms list
     Atom notify_targets;    // Response type for TARGETS (ATOM or TARGETS),
                             // see https://www.edwardrosten.com/code/x11.html
-    unsigned char* data[sel_total];     // Selection: _VIMENC_TEXT
+    uint8_t* data[sel_total];           // Selection: _VIMENC_TEXT
     size_t cb[sel_total];               // Selection: text size only
     Time stamp[sel_total];              // Selection: time stamp
     pthread_cond_t c_rdy[sel_total];    // Selection: "ready" condition
@@ -136,7 +136,7 @@ void* neo_create(bool first_run, bool targets_atom, const char** perr)
         [vimenc] = "_VIMENC_TEXT",
         [vimtext] = "_VIM_TEXT",
         [plain_utf8] = "text/plain;charset=utf-8",
-        [utf8] = "UTF8_STRING",
+        [utf8_string] = "UTF8_STRING",
         [plain] = "text/plain",
         [compound] = "COMPOUND_TEXT",
         [string] = "STRING",
@@ -144,7 +144,8 @@ void* neo_create(bool first_run, bool targets_atom, const char** perr)
     };
 
     // init context
-    x->w = XCreateSimpleWindow(x->d, DefaultRootWindow(x->d), 0, 0, 1, 1, 0, 0, 0);
+    x->w = XCreateSimpleWindow(x->d, XDefaultRootWindow(x->d), 0, 0, 1, 1, 0, 0, 0);
+    x->delta = CurrentTime;
     XInternAtoms(x->d, atom_name, total, 0, x->atom);
     x->notify_targets = targets_atom ? x->atom[atom] : x->atom[targets];
     XSetWMProtocols(x->d, x->w, &x->atom[wm_dele], 1);
@@ -201,7 +202,7 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
         struct timespec t = { 0, 0 };
         clock_gettime(CLOCK_REALTIME, &t); ++t.tv_sec;
         while (!x->f_rdy[sel]
-            && !pthread_cond_timedwait(&x->c_rdy[sel], &x->lock, &t))
+            && pthread_cond_timedwait(&x->c_rdy[sel], &x->lock, &t) == 0)
             /*nothing*/;
 
         // success
@@ -294,14 +295,14 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
     if (xse->property == x->atom[neo_ready]) {
         // read our property
         Atom type = None;
-        unsigned char* ptr = NULL;
+        uint8_t* ptr = NULL;
         unsigned char* xptr = NULL;
         unsigned long cxptr = 0;
         XGetWindowProperty(x->d, x->w, x->atom[neo_ready], 0, LONG_MAX, True,
             AnyPropertyType, &type, &(int){0}, &cxptr, &(unsigned long){0}, &xptr);
 
         do {
-            unsigned char* buf = xptr;
+            uint8_t* buf = (uint8_t*)xptr;
             size_t cb = cxptr;
 
             if (type == x->atom[incr]) {
@@ -335,13 +336,13 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
             } else if (type == x->atom[vimenc]) {
                 // _VIMENC_TEXT
                 if (cb >= 1 + sizeof("utf-8")
-                    && !memcmp(buf + 1, "utf-8", sizeof("utf-8"))) {
+                    && memcmp(buf + 1, "utf-8", sizeof("utf-8")) == 0) {
                     // this is UTF-8, hurray!
                     neo_own(x, false, sel, buf + 1 + sizeof("utf-8"),
                         cb - 1 - sizeof("utf-8"), buf[0]);
                 } else {
                     // no UTF-8, sigh... ask for UTF8_STRING then
-                    XConvertSelection(x->d, xse->selection, x->atom[utf8],
+                    XConvertSelection(x->d, xse->selection, x->atom[utf8_string],
                         x->atom[neo_ready], x->w, xse->time);
                 }
                 break;
@@ -349,7 +350,7 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
                 // _VIM_TEXT: assume UTF-8
                 neo_own(x, false, sel, buf + 1, cb - 1, buf[0]);
                 break;
-            } else if (type == x->atom[plain_utf8] || type == x->atom[utf8]
+            } else if (type == x->atom[plain_utf8] || type == x->atom[utf8_string]
                 || type == x->atom[plain]) {
                 // no conversion
                 neo_own(x, false, sel, buf, cb, 255);
@@ -361,7 +362,7 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
                     .value = buf,
                     .encoding = type,
                     .format = 8,
-                    .nitems = cb
+                    .nitems = cb,
                 };
                 char** list;
                 if (Xutf8TextPropertyToTextList(x->d, &xtp, &list, &(int){0})
@@ -395,13 +396,14 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
 static bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
 {
     // prepare SelectionNotify
-    XSelectionEvent xse;
-    xse.type = SelectionNotify;
-    xse.requestor = xsre->requestor;
-    xse.selection = xsre->selection;
-    xse.target = xsre->target;
-    xse.property = xsre->property ? xsre->property : xsre->target;
-    xse.time = xsre->time;
+    XSelectionEvent xse = {
+        .type = SelectionNotify,
+        .requestor = xsre->requestor,
+        .selection = xsre->selection,
+        .target = xsre->target,
+        .property = xsre->property ? xsre->property : xsre->target,
+        .time = xsre->time,
+    };
 
     if (neo_lock(x, true)) {
         int sel = atom2sel(x, xse.selection);
@@ -443,7 +445,7 @@ static bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
         xse.property = None;
 
     // send SelectionNotify
-    return !!XSendEvent(x->d, xse.requestor, 1, 0, (XEvent*)&xse);
+    return !!XSendEvent(x->d, xse.requestor, True, 0, (XEvent*)&xse);
 }
 
 
@@ -486,7 +488,7 @@ static bool on_client_message(neo_X* x, XClientMessageEvent* xcme)
 // Note: caller must acquire neo_lock() first
 static size_t alloc_data(neo_X* x, int sel, size_t cb)
 {
-    if (cb) {
+    if (cb > 0) {
         void* ptr = realloc(x->data[sel], 1 + sizeof("utf-8") + cb);
         if (ptr != NULL) {
             x->data[sel] = ptr;
@@ -532,15 +534,20 @@ static Atom best_target(neo_X* x, Atom* atom, int count)
 // send ClientMessage to our thread
 static void client_message(neo_X* x, int message, int param)
 {
-    XClientMessageEvent xcme;
-    xcme.type = ClientMessage;
-    xcme.display = x->d;
-    xcme.window = x->w;
-    xcme.message_type = x->atom[message];
-    xcme.format = 32;
-    xcme.data.l[0] = x->atom[param];
-    xcme.data.l[1] = time_stamp(x->delta);
-    XSendEvent(x->d, x->w, 0, 0, (XEvent*)&xcme);
+    XClientMessageEvent xcme = {
+        .type = ClientMessage,
+        .display = x->d,
+        .window = x->w,
+        .message_type = x->atom[message],
+        .format = 32,
+        .data = {
+            .l = {
+                [0] = x->atom[param],
+                [1] = time_stamp(x->delta),
+            },
+        },
+    };
+    XSendEvent(x->d, x->w, False, 0, (XEvent*)&xcme);
     XFlush(x->d);
 }
 
@@ -568,7 +575,7 @@ static Time time_stamp(Time ref)
 
     struct timespec t = { 0, 0 };
     clock_gettime(CLOCK_REALTIME, &t);
-    return (t.tv_sec * 1000 + t.tv_nsec / 1000000 - ref);
+    return (t.tv_sec * 1000 + t.tv_nsec / 1000000) - ref;
 }
 
 
@@ -581,15 +588,15 @@ static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse)
         xse->target, &(Atom){None}, &(int){0}, &c_tgt, &(unsigned long){0},
         (unsigned char**)&tgt);
 
-    for (int i = 0; i < (int)c_tgt; i += 2)
+    for (int i = 0; i < (long)c_tgt; i += 2)
         if (best_target(x, &tgt[i], 1) != None && tgt[i + 1] != None)
             to_property(x, sel, xse->requestor, tgt[i + 1], tgt[i]);
         else
             tgt[i + 1] = None;
 
-    if (c_tgt > 0) {
+    if ((long)c_tgt > 0) {
         XChangeProperty(x->d, xse->requestor, xse->property, xse->target, 32,
-            PropModeReplace, (unsigned char*)tgt, (int)c_tgt);
+            PropModeReplace, (unsigned char*)tgt, (long)c_tgt);
         XFree(tgt);
     }
 }
@@ -604,10 +611,10 @@ static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type)
     }
 
     XTextProperty xtp = {
-        .value = x->data[sel],
+        .value = (unsigned char*)x->data[sel],
         .encoding = type,
         .format = 8,
-        .nitems = x->cb[sel],
+        .nitems = (unsigned long)x->cb[sel],
     };
     unsigned char* ptr = NULL;
     unsigned char* xptr = NULL;

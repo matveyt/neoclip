@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 12
+ * Last Change:  2024 Aug 13
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -27,13 +27,13 @@ int neo_id(lua_State* L)
     const char* name = lua_tostring(L, -2);
     if (name == NULL)
         lua_pushliteral(L, "Unknown");
-    else if (!strcmp(name, "w32"))
+    else if (strcmp(name, "w32") == 0)
         lua_pushliteral(L, "WinAPI");
-    else if (!strcmp(name, "mac"))
+    else if (strcmp(name, "mac") == 0)
         lua_pushliteral(L, "AppKit");
-    else if (!strcmp(name, "wl"))
+    else if (strcmp(name, "wl") == 0)
         lua_pushliteral(L, "Wayland");
-    else if (!strcmp(name, "x11"))
+    else if (strcmp(name, "x11") == 0)
         lua_pushliteral(L, "X11");
     else
         lua_pushvalue(L, -2);
