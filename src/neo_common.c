@@ -72,7 +72,8 @@ int neo_nil(lua_State* L)
 }
 
 
-// print helper (mainly for debugging)
+#if 0
+// print helper for debugging
 // (L == NULL) => use previous lua_State
 void neo_printf(lua_State* L, const char* fmt, ...)
 {
@@ -93,6 +94,7 @@ void neo_printf(lua_State* L, const char* fmt, ...)
 
     va_end(argp);
 }
+#endif
 
 
 // split UTF-8 string into lines (LF or CRLF) and save in table [lines, regtype]

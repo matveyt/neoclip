@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Jul 18
+# Last Change:  2024 Aug 13
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -43,11 +43,6 @@ else # *nix
   # try finding Wayland
   wl_client = dependency('wayland-client', required : false)
   wlr_data_control_xml = 'extra/wlr-data-control-unstable-v1.xml'
-
-  # 'unstable-wayland' requires meson.version() >= 0.62.0
-  # for now we keep using custom_target() instead
-  # wlr_data_control =
-  #   import('unstable-wayland').scan_xml(wlr_data_control_xml).to_list()
 
   wl_scanner = find_program('wayland-scanner', required : false, native : true)
   if wl_scanner.found()
