@@ -12,36 +12,6 @@
 #include <string.h>
 
 
-// neoclip.driver.id() => string
-int neo_id(lua_State* L)
-{
-    // name = string.match(module_name, "(%w+)-")
-    lua_getglobal(L, "string");
-    lua_getfield(L, -1, "match");
-    neo_pushname(L);    // upvalue
-    lua_pushliteral(L, "(%w+)-");
-    lua_call(L, 2, 1);
-
-    // return "neoclip/" .. name
-    lua_pushliteral(L, "neoclip/");
-    const char* name = lua_tostring(L, -2);
-    if (name == NULL)
-        lua_pushliteral(L, "Unknown");
-    else if (strcmp(name, "w32") == 0)
-        lua_pushliteral(L, "WinAPI");
-    else if (strcmp(name, "mac") == 0)
-        lua_pushliteral(L, "AppKit");
-    else if (strcmp(name, "wl") == 0)
-        lua_pushliteral(L, "Wayland");
-    else if (strcmp(name, "x11") == 0)
-        lua_pushliteral(L, "X11");
-    else
-        lua_pushvalue(L, -2);
-    lua_concat(L, 2);
-    return 1;
-}
-
-
 // table concatenation (numeric indices only)
 // returns string on Lua stack!
 void neo_join(lua_State* L, int ix, const char* sep)
@@ -61,14 +31,6 @@ void neo_join(lua_State* L, int ix, const char* sep)
     }
 
     luaL_pushresult(&b);
-}
-
-
-// lua_CFunction () => nil
-int neo_nil(lua_State* L)
-{
-    lua_pushnil(L);
-    return 1;
 }
 
 
@@ -143,44 +105,49 @@ void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type)
 }
 
 
+// neoclip.driver.id() => string
+int neo_id(lua_State* L)
+{
+    // name = string.match(module_name, "(%w+)-")
+    lua_getglobal(L, "string");
+    lua_getfield(L, -1, "match");
+    neo_pushname(L);    // upvalue
+    lua_pushliteral(L, "(%w+)-");
+    lua_call(L, 2, 1);
+
+    // return "neoclip/" .. name
+    lua_pushliteral(L, "neoclip/");
+    const char* name = lua_tostring(L, -2);
+    if (name == NULL)
+        lua_pushliteral(L, "Unknown");
+    else if (strcmp(name, "w32") == 0)
+        lua_pushliteral(L, "WinAPI");
+    else if (strcmp(name, "mac") == 0)
+        lua_pushliteral(L, "AppKit");
+    else if (strcmp(name, "wl") == 0)
+        lua_pushliteral(L, "Wayland");
+    else if (strcmp(name, "x11") == 0)
+        lua_pushliteral(L, "X11");
+    else
+        lua_pushvalue(L, -2);
+    lua_concat(L, 2);
+    return 1;
+}
+
+
+// lua_CFunction () => nil
+int neo_nil(lua_State* L)
+{
+    lua_pushnil(L);
+    return 1;
+}
+
+
 // lua_CFunction () => true
 int neo_true(lua_State* L)
 {
     lua_pushboolean(L, 1);
     return 1;
-}
-
-// convert v/V/^V to MCHAR/MLINE/MBLOCK
-int neo_type(int ch)
-{
-    switch (ch) {
-    case 'c':
-    case 'v':
-        return 0;   // MCHAR
-    case 'l':
-    case 'V':
-        return 1;   // MLINE
-    case 'b':
-    case '\026':
-        return 2;   // MBLOCK
-    default:
-        return 255; // MAUTO
-    }
-}
-
-
-// get vim.g[var] as integer
-int neo_vimg(lua_State* L, const char* var, int dflt)
-{
-    lua_getglobal(L, "vim");
-    lua_getfield(L, -1, "g");
-    lua_getfield(L, -1, var);
-    int value = lua_isnil(L, -1) ? dflt
-        : lua_isboolean(L, -1) ? lua_toboolean(L, -1)
-        : lua_tointeger(L, -1);
-    lua_pop(L, 3);
-
-    return value;
 }
 
 

@@ -530,10 +530,10 @@ static void* offer_read(neo_X* x, struct zwlr_data_control_offer_v1* offer,
         wl_display_roundtrip(x->d);
         close(fds[1]);
 
-        void* buf = malloc(32 * 1024);
+        void* buf = malloc(64 * 1024);
         if (buf != NULL) {
             ssize_t part;
-            while ((part = read(fds[0], buf, 32 * 1024)) > 0) {
+            while ((part = read(fds[0], buf, 64 * 1024)) > 0) {
                 void* ptr2 = realloc(ptr, total + part);
                 if (ptr2 == NULL)
                     break;
