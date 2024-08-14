@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 13
+ * Last Change:  2024 Aug 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -57,8 +57,8 @@ static int sel2atom[sel_total] = {
 };
 
 
-// context structure
-typedef struct {
+// driver state
+struct neo_X {
     Display* d;             // X Display
     Window w;               // X Window
     Time delta;             // X server startup time (ms from Unix epoch)
@@ -72,14 +72,14 @@ typedef struct {
     bool f_rdy[sel_total];              // Selection: "ready" flag
     pthread_mutex_t lock;               // Mutex lock
     pthread_t tid;                      // Thread ID
-} neo_X;
+};
 
 
 // forward prototypes
 static void* thread_main(void* X);
 static bool on_sel_notify(neo_X* x, XSelectionEvent* xse);
 static bool on_sel_request(neo_X* x, XSelectionRequestEvent* xsre);
-static bool on_client_message(neo_X* x, XClientMessageEvent* xcme);
+static bool on_client_message(neo_X* X, XClientMessageEvent* xcme);
 static size_t alloc_data(neo_X* x, int sel, size_t cb);
 static int atom2sel(neo_X* x, Atom atom);
 static Atom best_target(neo_X* x, Atom* atom, int count);
@@ -91,7 +91,7 @@ static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type);
 
 
 // init context and start thread
-void* neo_create(bool first_run, bool targets_atom, const char** perr)
+neo_X* neo_create(bool first_run, bool targets_atom, const char** perr)
 {
     // initialize X threads (required for xcb)
     if (first_run && XInitThreads() == False) {
@@ -159,11 +159,9 @@ void* neo_create(bool first_run, bool targets_atom, const char** perr)
 
 
 // destroy context
-void neo_kill(void* X)
+void neo_kill(neo_X* x)
 {
-    if (X != NULL) {
-        neo_X* x = (neo_X*)X;
-
+    if (x != NULL) {
         client_message(x, wm_proto, wm_dele);
         pthread_join(x->tid, NULL);
         pthread_mutex_destroy(&x->lock);
@@ -179,9 +177,8 @@ void neo_kill(void* X)
 
 
 // lock or unlock selection data
-bool neo_lock(void* X, bool lock)
+bool neo_lock(neo_X* x, bool lock)
 {
-    neo_X* x = (neo_X*)X;
     int error = lock ? pthread_mutex_lock(&x->lock) : pthread_mutex_unlock(&x->lock);
     return (error == 0);
 }
@@ -189,11 +186,9 @@ bool neo_lock(void* X, bool lock)
 
 // fetch new selection
 // note: caller must unlock a pointer returned unless it is NULL
-const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
+const void* neo_fetch(neo_X* x, int sel, size_t* pcb, int* ptype)
 {
-    if (neo_lock(X, true)) {
-        neo_X* x = (neo_X*)X;
-
+    if (neo_lock(x, true)) {
         // send request
         x->f_rdy[sel] = false;
         client_message(x, neo_ready, sel2atom[sel]);
@@ -213,7 +208,7 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
         }
 
         // unlock on error or clipboard is empty
-        neo_lock(X, false);
+        neo_lock(x, false);
     }
 
     return NULL;
@@ -222,11 +217,9 @@ const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype)
 
 // own new selection
 // (cb == 0) => empty selection, (cb == SIZE_MAX) => keep selection
-void neo_own(void* X, bool offer, int sel, const void* ptr, size_t cb, int type)
+void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type)
 {
-    if (neo_lock(X, true)) {
-        neo_X* x = (neo_X*)X;
-
+    if (neo_lock(x, true)) {
         // set new data
         if (cb < SIZE_MAX) {
             // _VIMENC_TEXT: type 'encoding' NUL text
@@ -247,7 +240,7 @@ void neo_own(void* X, bool offer, int sel, const void* ptr, size_t cb, int type)
             pthread_cond_signal(&x->c_rdy[sel]);
         }
 
-        neo_lock(X, false);
+        neo_lock(x, false);
     }
 }
 
@@ -337,11 +330,11 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
                 // _VIMENC_TEXT
                 if (cb >= 1 + sizeof("utf-8")
                     && memcmp(buf + 1, "utf-8", sizeof("utf-8")) == 0) {
-                    // this is UTF-8, hurray!
+                    // this is UTF-8
                     neo_own(x, false, sel, buf + 1 + sizeof("utf-8"),
                         cb - 1 - sizeof("utf-8"), buf[0]);
                 } else {
-                    // no UTF-8, sigh... ask for UTF8_STRING then
+                    // no UTF-8; then ask for UTF8_STRING
                     XConvertSelection(x->d, xse->selection, x->atom[utf8_string],
                         x->atom[neo_ready], x->w, xse->time);
                 }
@@ -587,16 +580,17 @@ static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse)
     XGetWindowProperty(x->d, xse->requestor, xse->property, 0, LONG_MAX, False,
         xse->target, &(Atom){None}, &(int){0}, &c_tgt, &(unsigned long){0},
         (unsigned char**)&tgt);
+    int i_tgt = (int)(long)c_tgt;
 
-    for (int i = 0; i < (long)c_tgt; i += 2)
+    for (int i = 0; i < i_tgt; i += 2)
         if (best_target(x, &tgt[i], 1) != None && tgt[i + 1] != None)
             to_property(x, sel, xse->requestor, tgt[i + 1], tgt[i]);
         else
             tgt[i + 1] = None;
 
-    if ((long)c_tgt > 0) {
+    if (i_tgt > 0) {
         XChangeProperty(x->d, xse->requestor, xse->property, xse->target, 32,
-            PropModeReplace, (unsigned char*)tgt, (long)c_tgt);
+            PropModeReplace, (unsigned char*)tgt, i_tgt);
         XFree(tgt);
     }
 }

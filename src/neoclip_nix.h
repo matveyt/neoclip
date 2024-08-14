@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 13
+ * Last Change:  2024 Aug 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -21,11 +21,14 @@ enum {
     sel_total
 };
 
-void* neo_create(bool first_run, bool targets_atom, const char** perr);
-void neo_kill(void* X);
-bool neo_lock(void* X, bool lock);
-const void* neo_fetch(void* X, int sel, size_t* pcb, int* ptype);
-void neo_own(void* X, bool offer, int sel, const void* ptr, size_t cb, int type);
+// driver state
+typedef struct neo_X neo_X;
+
+neo_X* neo_create(bool first_run, bool targets_atom, const char** perr);
+void neo_kill(neo_X* x);
+bool neo_lock(neo_X* x, bool lock);
+const void* neo_fetch(neo_X* x, int sel, size_t* pcb, int* ptype);
+void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type);
 
 
 #endif // NEOCLIP_NIX_H

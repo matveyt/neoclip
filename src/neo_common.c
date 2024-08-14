@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 13
+ * Last Change:  2024 Aug 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -72,35 +72,13 @@ int neo_nil(lua_State* L)
 }
 
 
-#if 0
-// print helper for debugging
-// (L == NULL) => use previous lua_State
-void neo_printf(lua_State* L, const char* fmt, ...)
-{
-    static lua_State* LL = NULL;
-    if (L != NULL)
-        LL = L;
-    else if (LL != NULL)
-        L = LL;
-    else
-        return;
-
-    va_list argp;
-    va_start(argp, fmt);
-
-    lua_getglobal(L, "print");
-    lua_pushvfstring(L, fmt, argp);
-    lua_call(L, 1, 0);
-
-    va_end(argp);
-}
-#endif
-
-
 // split UTF-8 string into lines (LF or CRLF) and save in table [lines, regtype]
 // chop invalid data, e.g. trailing zero in Windows Clipboard
 void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type)
 {
+    // accept negative index too
+    ix = neo_absindex(L, ix);
+
     // validate input
     luaL_checktype(L, ix, LUA_TTABLE);
     if (data == NULL || cb < 1)
@@ -204,3 +182,45 @@ int neo_vimg(lua_State* L, const char* var, int dflt)
 
     return value;
 }
+
+
+#if 0
+// debug helpers
+// (L == NULL) => use previous lua_State
+static lua_State* LL = NULL;
+#define LL_SET(L)   if ((L) != NULL)        \
+                        LL = (L);           \
+                    else if (LL != NULL)    \
+                        (L) = LL;           \
+                    else                    \
+                        return
+
+void neo_inspect(lua_State* L, int ix)
+{
+    LL_SET(L);
+    ix = neo_absindex(L, ix);
+
+    lua_getglobal(L, "print");
+    lua_getglobal(L, "vim");
+    lua_getfield(L, -1, "inspect");
+    lua_replace(L, -2);
+    lua_pushvalue(L, ix);
+    lua_call(L, 1, 1);
+    lua_call(L, 1, 0);
+}
+
+
+void neo_printf(lua_State* L, const char* fmt, ...)
+{
+    LL_SET(L);
+
+    va_list argp;
+    va_start(argp, fmt);
+
+    lua_getglobal(L, "print");
+    lua_pushvfstring(L, fmt, argp);
+    lua_call(L, 1, 0);
+
+    va_end(argp);
+}
+#endif

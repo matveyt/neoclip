@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 13
+ * Last Change:  2024 Aug 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,10 +12,10 @@
 
 
 // userdata
-typedef struct {
+struct neo_UD {
     UINT uVimMeta, uVimRaw; // Vim clipboard format
     UINT uOEMCP, uACP;      // OEM/ANSI code page
-} UD;
+};
 
 
 // forward prototypes
@@ -29,7 +29,7 @@ static HANDLE wc2mb(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* 
 __declspec(dllexport)
 int luaopen_driver(lua_State* L)
 {
-    static struct luaL_Reg const methods[] = {
+    static struct luaL_Reg const iface[] = {
         { "id", neo_id },
         { "start", neo_nil },
         { "stop", neo_nil },
@@ -39,8 +39,14 @@ int luaopen_driver(lua_State* L)
         { NULL, NULL }
     };
 
-    lua_pushvalue(L, 1);                        // upvalue 1: module name
-    UD* ud = lua_newuserdata(L, sizeof(UD));    // upvalue 2: userdata
+#if defined(luaL_newlibtable)
+    luaL_newlibtable(L, iface);
+#else
+    lua_createtable(L, 0, sizeof(iface) / sizeof(iface[0]) - 1);
+#endif
+
+    lua_pushvalue(L, 1);                                // upvalue 1: module name
+    neo_UD* ud = lua_newuserdata(L, sizeof(neo_UD));    // upvalue 2: userdata
     ud->uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
     ud->uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
     GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IDEFAULTCODEPAGE
@@ -55,13 +61,9 @@ int luaopen_driver(lua_State* L)
     lua_setmetatable(L, -2);
 
 #if defined(luaL_newlibtable)
-    luaL_newlibtable(L, methods);
-    lua_insert(L, -3);  // move table before upvalues
-    luaL_setfuncs(L, methods, 2);
+    luaL_setfuncs(L, iface, 2);
 #else
-    lua_createtable(L, 0, sizeof(methods) / sizeof(methods[0]) - 1);
-    lua_insert(L, -3);  // move table before upvalues
-    luaL_openlib(L, NULL, methods, 2);
+    luaL_openlib(L, NULL, iface, 2);
 #endif
     return 1;
 }
@@ -71,7 +73,7 @@ int luaopen_driver(lua_State* L)
 int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
-    UD* ud = neo_ud(L);
+    neo_UD* ud = neo_ud(L);
 
     // a table to return
     lua_createtable(L, 2, 0);
@@ -134,7 +136,7 @@ int neo_get(lua_State* L)
     if (hData != NULL) {
         // note: pBuf may contain trailing NUL
         if (pBuf != NULL)
-            neo_split(L, lua_gettop(L), pBuf, count, meta[0]);
+            neo_split(L, -1, pBuf, count, meta[0]);
         if (hBuf != NULL)
             GlobalUnlock(hBuf), GlobalFree(hBuf);
         GlobalUnlock(hData);
@@ -150,7 +152,7 @@ int neo_set(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
-    UD* ud = neo_ud(L);
+    neo_UD* ud = neo_ud(L);
 
     BOOL bSuccess = OpenClipboard(NULL);
     if (bSuccess) {

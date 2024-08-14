@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 12
+ * Last Change:  2024 Aug 14
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -18,7 +18,7 @@ static NSString* VimPboardType = @"VimPboardType";
 __attribute__((visibility("default")))
 int luaopen_driver(lua_State* L)
 {
-    static struct luaL_Reg const methods[] = {
+    static struct luaL_Reg const iface[] = {
         { "id", neo_id },
         { "start", neo_nil },
         { "stop", neo_nil },
@@ -29,13 +29,17 @@ int luaopen_driver(lua_State* L)
     };
 
 #if defined(luaL_newlibtable)
-    luaL_newlibtable(L, methods);
-    lua_pushvalue(L, 1);    // upvalue 1: module name
-    luaL_setfuncs(L, methods, 1);
+    luaL_newlibtable(L, iface);
 #else
-    lua_createtable(L, 0, sizeof(methods) / sizeof(methods[0]) - 1);
+    lua_createtable(L, 0, sizeof(iface) / sizeof(iface[0]) - 1);
+#endif
+
     lua_pushvalue(L, 1);    // upvalue 1: module name
-    luaL_openlib(L, NULL, methods, 1);
+
+#if defined(luaL_newlibtable)
+    luaL_setfuncs(L, iface, 1);
+#else
+    luaL_openlib(L, NULL, iface, 1);
 #endif
     return 1;
 }
@@ -74,7 +78,7 @@ int neo_get(lua_State* L)
         // convert to UTF-8 and split into table
         NSData* buf = [str dataUsingEncoding:NSUTF8StringEncoding];
         if (buf.length > 0)
-            neo_split(L, lua_gettop(L), buf.bytes, buf.length, type);
+            neo_split(L, -1, buf.bytes, buf.length, type);
     }
 
     // always return table (empty on error)
