@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 14
+ * Last Change:  2024 Aug 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,6 +9,7 @@
 #ifndef NEOCLIP_NIX_H
 #define NEOCLIP_NIX_H
 
+#include "neoclip.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -21,14 +22,30 @@ enum {
     sel_total
 };
 
-// driver state
+// incomplete type
 typedef struct neo_X neo_X;
 
-neo_X* neo_create(bool first_run, bool targets_atom, const char** perr);
-void neo_kill(neo_X* x);
-bool neo_lock(neo_X* x, bool lock);
-const void* neo_fetch(neo_X* x, int sel, size_t* pcb, int* ptype);
+int neo_start(lua_State* L);
+void neo_fetch(lua_State* L, int ix, int sel);
 void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type);
+
+// inline helpers
+static inline neo_X* neo_checkx(lua_State* L)
+{
+    luaL_checktype(L, uv_share, LUA_TTABLE);
+    lua_getfield(L, uv_share, "x");
+    neo_X* x = (neo_X*)neo_checkud(L, -1);
+    lua_pop(L, 1);
+    return x;
+}
+static inline neo_X* neo_x(lua_State* L)
+{
+    luaL_checktype(L, uv_share, LUA_TTABLE);
+    lua_getfield(L, uv_share, "x");
+    neo_X* x = (neo_X*)neo_ud(L, -1);
+    lua_pop(L, 1);
+    return x;
+}
 
 
 #endif // NEOCLIP_NIX_H

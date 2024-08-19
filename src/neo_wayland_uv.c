@@ -7,13 +7,9 @@
 
 
 #include "neoclip_nix.h"
-#include <poll.h>
-#include <pthread.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/signalfd.h>
 #include <wayland-client.h>
 #include <wayland-wlr-data-control-client-protocol.h>
 
@@ -111,8 +107,6 @@ struct neo_X {
     struct zwlr_data_control_device_v1* dcd;    // wlroots data control device
     uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
     size_t cb[sel_total];                       // Selection: text size only
-    pthread_mutex_t lock;                       // Mutex lock
-    pthread_t tid;                              // Thread ID
 };
 
 
@@ -130,8 +124,8 @@ static const char* mime[] = {
 
 // forward prototypes
 static int neo__gc(lua_State* L);
-static bool neo_lock(neo_X* x, bool lock);
-static void* thread_main(void* X);
+static int cb_prepare(lua_State* L);
+static int cb_poll(lua_State* L);
 static size_t alloc_data(neo_X* x, int sel, size_t cb);
 static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer);
 static void sel_write(neo_X* x, int sel, const char* mime_type, int fd);
@@ -186,9 +180,40 @@ int neo_start(lua_State* L)
         // uv_share.x = x
         lua_setfield(L, uv_share, "x");
 
-        // start thread
-        pthread_mutex_init(&x->lock, NULL);
-        pthread_create(&x->tid, NULL, thread_main, x);
+        // start polling the display
+        lua_getglobal(L, "vim");    // vim => stack
+        lua_getfield(L, -1, "uv");  // uv or loop => stack
+        if (lua_isnil(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "loop");
+        }
+
+        // local prepare = uv.new_prepare()
+        lua_getfield(L, -1, "new_prepare");
+        lua_call(L, 0, 1);          // prepare => stack
+        // uv.prepare_start(prepare, cb_prepare)
+        lua_getfield(L, -2, "prepare_start");
+        lua_pushvalue(L, -2);
+        neo_pushcfunction(L, cb_prepare);
+        lua_call(L, 2, 0);
+
+        // local poll = uv.new_poll(wl_display_get_fd(x->d))
+        lua_getfield(L, -2, "new_poll");
+        lua_pushinteger(L, wl_display_get_fd(x->d));
+        lua_call(L, 1, 1);          // poll => stack
+        // uv.poll_start(poll, "r", cb_poll)
+        lua_getfield(L, -3, "poll_start");
+        lua_pushvalue(L, -2);
+        lua_pushliteral(L, "r");
+        neo_pushcfunction(L, cb_poll);
+        lua_call(L, 3, 0);
+
+        // uv_share.poll = poll
+        lua_setfield(L, uv_share, "poll");
+        // uv_share.prepare = prepare
+        lua_setfield(L, uv_share, "prepare");
+        // uv_share.uv = vim.uv or vim.loop
+        lua_setfield(L, uv_share, "uv");
     }
 
     lua_pushnil(L);
@@ -202,11 +227,42 @@ static int neo__gc(lua_State* L)
     // cannot checkudata anymore
     neo_X* x = lua_touserdata(L, 1);
 
+    lua_getfield(L, uv_share, "uv");    // uv or loop => stack
+
+    // vim.uv.poll_stop(uv_share.poll)
+    lua_getfield(L, -1, "poll_stop");
+    lua_getfield(L, uv_share, "poll");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // vim.uv.close(poll)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "poll");
+        lua_call(L, 1, 0);
+        // uv_share.poll = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "poll");
+    }
+
+    // vim.uv.prepare_stop(prepare)
+    lua_getfield(L, -1, "prepare_stop");
+    lua_getfield(L, uv_share, "prepare");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // vim.uv.close(prepare)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "prepare");
+        lua_call(L, 1, 0);
+        // uv_share.prepare = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "prepare");
+    }
+
     // clear data
     if (x != NULL) {
-        pthread_kill(x->tid, SIGTERM);
-        pthread_join(x->tid, NULL);
-        pthread_mutex_destroy(&x->lock);
         for (int i = 0; i < sel_total; ++i)
             free(x->data[i]);
         zwlr_data_control_device_v1_destroy(x->dcd);
@@ -222,14 +278,11 @@ static int neo__gc(lua_State* L)
 void neo_fetch(lua_State* L, int ix, int sel)
 {
     neo_X* x = neo_x(L);
-    if (x != NULL && neo_lock(x, true)) {
+    if (x != NULL) {
         // wlr_data_control_device should've informed us of a new selection
         if (x->cb[sel] > 0)
             neo_split(L, ix, x->data[sel] + 1 + sizeof("utf-8"), x->cb[sel],
                 x->data[sel][0]);
-
-        // release lock
-        neo_lock(x, false);
     }
 }
 
@@ -238,93 +291,64 @@ void neo_fetch(lua_State* L, int ix, int sel)
 // (cb == 0) => empty selection, (cb == SIZE_MAX) => keep selection
 void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type)
 {
-    if (neo_lock(x, true)) {
-        // set new data
-        if (cb < SIZE_MAX) {
-            // _VIMENC_TEXT: type 'encoding' NUL text
-            cb = alloc_data(x, sel, cb);
-            if (cb > 0) {
-                x->data[sel][0] = type;
-                memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
-                memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
-            }
+    // set new data
+    if (cb < SIZE_MAX) {
+        // _VIMENC_TEXT: type 'encoding' NUL text
+        cb = alloc_data(x, sel, cb);
+        if (cb > 0) {
+            x->data[sel][0] = type;
+            memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
+            memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
         }
-
-        if (offer) {
-            // offer our selection
-            struct zwlr_data_control_source_v1* dcs =
-                zwlr_data_control_manager_v1_create_data_source(x->dcm);
-            for (int i = 0; i < COUNTOF(mime); ++i)
-                zwlr_data_control_source_v1_offer(dcs, mime[i]);
-            switch (sel) {
-            case sel_prim:
-                listen_to(dcs, INDEX(source_prim), x);
-                zwlr_data_control_device_v1_set_primary_selection(x->dcd, dcs);
-            break;
-            case sel_clip:
-                listen_to(dcs, INDEX(source_clip), x);
-                zwlr_data_control_device_v1_set_selection(x->dcd, dcs);
-            break;
-            }
-            wl_display_flush(x->d);
-        }
-
-        neo_lock(x, false);
     }
-}
 
-
-// lock or unlock selection data
-static bool neo_lock(neo_X* x, bool lock)
-{
-    int error = lock ? pthread_mutex_lock(&x->lock) : pthread_mutex_unlock(&x->lock);
-    return (error == 0);
-}
-
-
-// thread entry point
-static void* thread_main(void* X)
-{
-    neo_X* x = (neo_X*)X;
-
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGINT);
-    sigaddset(&mask, SIGTERM);
-    pthread_sigmask(SIG_BLOCK, &mask, NULL);
-
-    struct pollfd fds[2] = {
-        { .fd = wl_display_get_fd(x->d), .events = POLLIN, },
-        { .fd = signalfd(-1, &mask, 0), .events = POLLIN, },
-    };
-
-    for (;;) {
-        while (wl_display_prepare_read(x->d) != 0)
-            wl_display_dispatch_pending(x->d);
+    if (offer) {
+        // offer our selection
+        struct zwlr_data_control_source_v1* dcs =
+            zwlr_data_control_manager_v1_create_data_source(x->dcm);
+        for (int i = 0; i < COUNTOF(mime); ++i)
+            zwlr_data_control_source_v1_offer(dcs, mime[i]);
+        switch (sel) {
+        case sel_prim:
+            listen_to(dcs, INDEX(source_prim), x);
+            zwlr_data_control_device_v1_set_primary_selection(x->dcd, dcs);
+        break;
+        case sel_clip:
+            listen_to(dcs, INDEX(source_clip), x);
+            zwlr_data_control_device_v1_set_selection(x->dcd, dcs);
+        break;
+        }
         wl_display_flush(x->d);
+    }
+}
 
-        if (poll(fds, 2, -1) < 0) {
-            wl_display_cancel_read(x->d);
-            break;
-        }
 
-        if (fds[0].revents == POLLIN) {
-            if (wl_display_read_events(x->d) != -1)
-                wl_display_dispatch_pending(x->d);
-        } else {
-            wl_display_cancel_read(x->d);
-        }
+// uv_prepare_t callback
+static int cb_prepare(lua_State* L)
+{
+    neo_X* x = neo_checkx(L);
 
-        if (fds[1].revents & POLLIN) {
-            struct signalfd_siginfo ssi;
-            size_t cb = read(fds[1].fd, &ssi, sizeof(ssi));
-            if (cb != sizeof(ssi) || ssi.ssi_signo == SIGINT || ssi.ssi_signo == SIGTERM)
-                break;
-        }
+    while (wl_display_prepare_read(x->d) != 0)
+        wl_display_dispatch_pending(x->d);
+
+    wl_display_flush(x->d);
+    return 0;
+}
+
+
+// uv_poll_t callback
+static int cb_poll(lua_State* L)
+{
+    neo_X* x = neo_checkx(L);
+
+    if (lua_isnil(L, 1)) {
+        if (wl_display_read_events(x->d) != -1)
+            wl_display_dispatch_pending(x->d);
+    } else {
+        wl_display_cancel_read(x->d);
     }
 
-    close(fds[1].fd);
-    return NULL;
+    return 0;
 }
 
 
@@ -440,7 +464,6 @@ static void data_control_source_cancelled(void* X,
 
 
 // (re-)allocate data buffer for selection
-// Note: caller must acquire neo_lock() first
 static size_t alloc_data(neo_X* x, int sel, size_t cb)
 {
     if (cb > 0) {
@@ -505,28 +528,25 @@ static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer
 // write selection data to file descriptor
 static void sel_write(neo_X* x, int sel, const char* mime_type, int fd)
 {
-    if (neo_lock(x, true)) {
-        // assume _VIMENC_TEXT
-        uint8_t* buf = x->data[sel];
-        size_t cb = 1 + sizeof("utf-8") + x->cb[sel];
-        ssize_t n = 1;
+    // assume _VIMENC_TEXT
+    uint8_t* buf = x->data[sel];
+    size_t cb = 1 + sizeof("utf-8") + x->cb[sel];
+    ssize_t n = 1;
 
-        // not _VIMENC_TEXT?
-        if (strcmp(mime_type, mime[0]) != 0) {
-            // _VIM_TEXT: output type
-            if (strcmp(mime_type, mime[1]) == 0)
-                n = write(fd, buf, 1);
+    // not _VIMENC_TEXT?
+    if (strcmp(mime_type, mime[0]) != 0) {
+        // _VIM_TEXT: output type
+        if (strcmp(mime_type, mime[1]) == 0)
+            n = write(fd, buf, 1);
 
-            // skip over header
-            buf += 1 + sizeof("utf-8");
-            cb -= 1 + sizeof("utf-8");
-        }
-
-        // output selection
-        if (n > 0)
-            n = write(fd, buf, cb);
-        neo_lock(x, false);
+        // skip over header
+        buf += 1 + sizeof("utf-8");
+        cb -= 1 + sizeof("utf-8");
     }
+
+    // output selection
+    if (n > 0)
+        n = write(fd, buf, cb);
 
     close(fd);
 }

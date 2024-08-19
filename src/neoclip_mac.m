@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 14
+ * Last Change:  2024 Aug 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,6 +12,13 @@
 
 // Vim compatible format
 static NSString* VimPboardType = @"VimPboardType";
+
+
+// forward prototypes
+static int neo_nil(lua_State* L);
+static int neo_true(lua_State* L);
+static int neo_get(lua_State* L);
+static int neo_set(lua_State* L);
 
 
 // module registration
@@ -34,19 +41,35 @@ int luaopen_driver(lua_State* L)
     lua_createtable(L, 0, sizeof(iface) / sizeof(iface[0]) - 1);
 #endif
 
-    lua_pushvalue(L, 1);    // upvalue 1: module name
+    lua_pushvalue(L, 1);    // upvalue 1 : module name
 
 #if defined(luaL_newlibtable)
-    luaL_setfuncs(L, iface, 1);
+    luaL_setfuncs(L, iface, 2);
 #else
-    luaL_openlib(L, NULL, iface, 1);
+    luaL_openlib(L, NULL, iface, 2);
 #endif
     return 1;
 }
 
 
-// neoclip.driver.get(regname) => [lines, regtype]
-int neo_get(lua_State* L)
+// lua_CFunction() => nil
+static int neo_nil(lua_State* L)
+{
+    lua_pushnil(L);
+    return 1;
+}
+
+
+// lua_CFunction() => true
+static int neo_true(lua_State* L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+
+// get(regname) => [lines, regtype]
+static int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
 
@@ -86,8 +109,8 @@ int neo_get(lua_State* L)
 }
 
 
-// neoclip.driver.set(regname, lines, regtype) => boolean
-int neo_set(lua_State* L)
+// set(regname, lines, regtype) => boolean
+static int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines

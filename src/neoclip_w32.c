@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 14
+ * Last Change:  2024 Aug 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -11,7 +11,7 @@
 #include <windows.h>
 
 
-// userdata
+// shared data
 struct neo_UD {
     UINT uVimMeta, uVimRaw; // Vim clipboard format
     UINT uOEMCP, uACP;      // OEM/ANSI code page
@@ -19,6 +19,10 @@ struct neo_UD {
 
 
 // forward prototypes
+static int neo_nil(lua_State* L);
+static int neo_true(lua_State* L);
+static int neo_get(lua_State* L);
+static int neo_set(lua_State* L);
 static HANDLE get_and_lock(UINT uFormat, LPVOID ppData, size_t* pcbMax);
 static BOOL unlock_and_set(UINT uFormat, HANDLE hData);
 static HANDLE mb2wc(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch);
@@ -45,8 +49,8 @@ int luaopen_driver(lua_State* L)
     lua_createtable(L, 0, sizeof(iface) / sizeof(iface[0]) - 1);
 #endif
 
-    lua_pushvalue(L, 1);                                // upvalue 1: module name
-    neo_UD* ud = lua_newuserdata(L, sizeof(neo_UD));    // upvalue 2: userdata
+    lua_pushvalue(L, 1);                                // upvalue 1 : module name
+    neo_UD* ud = lua_newuserdata(L, sizeof(neo_UD));    // upvalue 2 : shared data
     ud->uVimMeta = RegisterClipboardFormatW(L"VimClipboard2");
     ud->uVimRaw = RegisterClipboardFormatW(L"VimRawBytes");
     GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IDEFAULTCODEPAGE
@@ -54,9 +58,9 @@ int luaopen_driver(lua_State* L)
     GetLocaleInfoW(LOCALE_USER_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE
         | LOCALE_RETURN_NUMBER, (WCHAR*)&ud->uACP, sizeof(UINT) / sizeof(WCHAR));
 
-    // metatable for userdata
+    // metatable for shared data
     luaL_newmetatable(L, lua_tostring(L, 1));
-    //lua_pushcfunction(L, neo__gc);
+    //neo_pushcfunction(L, neo__gc);
     //lua_setfield(L, -2, "__gc");
     lua_setmetatable(L, -2);
 
@@ -69,11 +73,27 @@ int luaopen_driver(lua_State* L)
 }
 
 
-// neoclip.driver.get(regname) => [lines, regtype]
-int neo_get(lua_State* L)
+// lua_CFunction() => nil
+static int neo_nil(lua_State* L)
+{
+    lua_pushnil(L);
+    return 1;
+}
+
+
+// lua_CFunction() => true
+static int neo_true(lua_State* L)
+{
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+
+// get(regname) => [lines, regtype]
+static int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
-    neo_UD* ud = neo_ud(L);
+    neo_UD* ud = neo_checkud(L, uv_share);
 
     // a table to return
     lua_createtable(L, 2, 0);
@@ -146,13 +166,13 @@ int neo_get(lua_State* L)
 }
 
 
-// neoclip.driver.set(regname, lines, regtype) => boolean
-int neo_set(lua_State* L)
+// set(regname, lines, regtype) => boolean
+static int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
-    neo_UD* ud = neo_ud(L);
+    neo_UD* ud = neo_checkud(L, uv_share);
 
     BOOL bSuccess = OpenClipboard(NULL);
     if (bSuccess) {

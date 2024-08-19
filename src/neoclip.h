@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 14
+ * Last Change:  2024 Aug 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,34 +13,31 @@
 #include <lauxlib.h>
 
 
-// userdata
+enum {
+    uv_module = lua_upvalueindex(1),    // module name
+    uv_share = lua_upvalueindex(2),     // shared value (table or userdata)
+};
+
+// incomplete type
 typedef struct neo_UD neo_UD;
 
-// module interface
-extern int neo_start(lua_State* L);
-extern int neo_stop(lua_State* L);
-extern int neo__gc(lua_State* L);
-extern int neo_status(lua_State* L);
-extern int neo_get(lua_State* L);
-extern int neo_set(lua_State* L);
-
 // neo_common.c
-extern void neo_join(lua_State* L, int ix, const char* sep);
-extern void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type);
-extern int neo_id(lua_State* L);                            // lua_CFunction
-extern int neo_nil(lua_State* L);                           // lua_CFunction
-extern int neo_true(lua_State* L);                          // lua_CFunction
-extern void neo_inspect(lua_State* L, int ix);              // debug only
-extern void neo_printf(lua_State* L, const char* fmt, ...); // debug only
+void neo_join(lua_State* L, int ix, const char* sep);
+void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type);
+int neo_id(lua_State* L);                               // lua_CFunction() => string
+void neo_inspect(lua_State* L, int ix);                 // debug only
+void neo_printf(lua_State* L, const char* fmt, ...);    // debug only
 
 // inline helpers
 static inline int neo_absindex(lua_State *L, int ix)
 {
     return (0 > ix && ix > LUA_REGISTRYINDEX) ? (ix + 1 + lua_gettop(L)) : ix;
 }
-static inline void neo_pushname(lua_State* L)
+static inline void neo_pushcfunction(lua_State* L, lua_CFunction fn)
 {
-    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_pushvalue(L, uv_module);    // upvalue 1 : module name
+    lua_pushvalue(L, uv_share);     // upvalue 2 : shared table
+    lua_pushcclosure(L, fn, 2);
 }
 static inline int neo_type(int ch)
 {
@@ -58,22 +55,13 @@ static inline int neo_type(int ch)
         return 255; // MAUTO
     }
 }
-static inline neo_UD* neo_ud(lua_State* L)
+static inline neo_UD* neo_checkud(lua_State* L, int ix)
 {
-    return (neo_UD*)luaL_checkudata(L, lua_upvalueindex(2),
-        lua_tostring(L, lua_upvalueindex(1)));
+    return (neo_UD*)luaL_checkudata(L, ix, lua_tostring(L, uv_module));
 }
-static inline int neo_vimg(lua_State* L, const char* var, int dflt)
+static inline neo_UD* neo_ud(lua_State* L, int ix)
 {
-    lua_getglobal(L, "vim");
-    lua_getfield(L, -1, "g");
-    lua_getfield(L, -1, var);
-    int value = lua_isnil(L, -1) ? dflt
-        : lua_isboolean(L, -1) ? lua_toboolean(L, -1)
-        : lua_tointeger(L, -1);
-    lua_pop(L, 3);
-
-    return value;
+    return (neo_UD*)luaL_testudata(L, ix, lua_tostring(L, uv_module));
 }
 
 

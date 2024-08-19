@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 14
+ * Last Change:  2024 Aug 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,7 +13,7 @@
 
 
 // table concatenation (numeric indices only)
-// returns string on Lua stack!
+// returns string on Lua stack
 void neo_join(lua_State* L, int ix, const char* sep)
 {
     luaL_Buffer b;
@@ -94,24 +94,24 @@ void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type)
     } while (--rest);
 
     // push last string w/o invalid rest
-    lua_pushlstring(L, (const char*)pb, off/* + rest*/);
+    lua_pushlstring(L, (const char*)pb, off - (state < 0));
     lua_rawseti(L, -2, i);
 
     // save result
     lua_rawseti(L, ix, 1);
     lua_pushlstring(L, type == 0 ? "v" : type == 1 ? "V" : type == 2 ? "\026" :
-        off ? "v" : "V" , sizeof(char));
+        (state >= 0 && off > 0) ? "v" : "V", sizeof(char));
     lua_rawseti(L, ix, 2);
 }
 
 
-// neoclip.driver.id() => string
+// lua_CFunction() => string
 int neo_id(lua_State* L)
 {
     // name = string.match(module_name, "(%w+)-")
     lua_getglobal(L, "string");
     lua_getfield(L, -1, "match");
-    neo_pushname(L);    // upvalue
+    lua_pushvalue(L, uv_module);
     lua_pushliteral(L, "(%w+)-");
     lua_call(L, 2, 1);
 
@@ -125,28 +125,16 @@ int neo_id(lua_State* L)
     else if (strcmp(name, "mac") == 0)
         lua_pushliteral(L, "AppKit");
     else if (strcmp(name, "wl") == 0)
-        lua_pushliteral(L, "Wayland");
+        lua_pushliteral(L, "Wayland+pthreads");
+    else if (strcmp(name, "wluv") == 0)
+        lua_pushliteral(L, "Wayland+luv");
     else if (strcmp(name, "x11") == 0)
-        lua_pushliteral(L, "X11");
+        lua_pushliteral(L, "X11+pthreads");
+    else if (strcmp(name, "x11uv") == 0)
+        lua_pushliteral(L, "X11+luv");
     else
         lua_pushvalue(L, -2);
     lua_concat(L, 2);
-    return 1;
-}
-
-
-// lua_CFunction () => nil
-int neo_nil(lua_State* L)
-{
-    lua_pushnil(L);
-    return 1;
-}
-
-
-// lua_CFunction () => true
-int neo_true(lua_State* L)
-{
-    lua_pushboolean(L, 1);
     return 1;
 }
 

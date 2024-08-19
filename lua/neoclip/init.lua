@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Aug 12
+    Last Change:    2024 Aug 19
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -57,6 +57,7 @@ function neoclip:register(clipboard)
                 ["+"] = function() return self.driver.get"+" end,
                 ["*"] = function() return self.driver.get"*" end,
             },
+            cache_enabled = false,
         }
         -- create autocmds
         if vim.api.nvim_create_augroup then
@@ -97,7 +98,10 @@ function neoclip:setup(driver)
     local has = function(feat) return vim.fn.has(feat) == 1 end
 
     -- (re-)init self
-    self.driver = nil
+    if self.driver then
+        self.driver.stop()
+        self.driver = nil
+    end
     self.issues = {}
 
     -- load driver
@@ -109,8 +113,9 @@ function neoclip:setup(driver)
         self:require"neoclip.mac-driver"
     elseif has"unix" then
         -- Wayland first, fallback to X11
-        local _ = vim.env.WAYLAND_DISPLAY and self:require"neoclip.wl-driver"
-            or self:require"neoclip.x11-driver"
+        local _ = vim.env.WAYLAND_DISPLAY
+            and (self:require"neoclip.wluv-driver" or self:require"neoclip.wl-driver")
+            or (self:require"neoclip.x11uv-driver" or self:require"neoclip.x11-driver")
     else
         self:issue"Unsupported platform"
     end
