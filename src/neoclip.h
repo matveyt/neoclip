@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -8,6 +8,14 @@
 
 #ifndef NEOCLIP_H
 #define NEOCLIP_H
+
+#include <limits.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <lua.h>
 #include <lauxlib.h>

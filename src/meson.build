@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Aug 19
+# Last Change:  2024 Aug 20
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -18,7 +18,7 @@ mac_build   = true
 x11_build   = true
 x11uv_build = true
 wl_build    = true
-wluv_build  = false
+wluv_build  = true
 
 
 # Lua(JIT) is always required

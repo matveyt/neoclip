@@ -1,15 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip.h"
-#include <stdarg.h>
-#include <stdint.h>
-#include <string.h>
 
 
 // table concatenation (numeric indices only)

@@ -1,15 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip_nix.h"
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -70,7 +67,7 @@ static size_t alloc_data(neo_X* x, int sel, size_t cb);
 static int atom2sel(neo_X* x, Atom atom);
 static Atom best_target(neo_X* x, Atom* atom, int count);
 static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg);
-static Time time_stamp(Time ref);
+static Time time_diff(Time ref);
 static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse);
 static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type);
 static int vimg(lua_State* L, const char* var, int d);
@@ -249,7 +246,7 @@ void neo_fetch(lua_State* L, int ix, int sel)
             // what TARGETS are supported?
             x->f_rdy[sel] = false;
             XConvertSelection(x->d, x->atom[sel], x->atom[targets], x->atom[neo_ready],
-                x->w, time_stamp(x->delta));
+                x->w, time_diff(x->delta));
 
             lua_getfield(L, uv_share, "uv");    // uv or loop => stack
 
@@ -302,7 +299,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
             memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
             memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
         }
-        x->stamp[sel] = time_stamp(x->delta);
+        x->stamp[sel] = time_diff(x->delta);
     }
 
     if (offer) {
@@ -319,12 +316,13 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 // uv_prepare_t callback
 static int cb_prepare(lua_State* L)
 {
-    neo_X* x = neo_checkx(L);
-
-    while (XPending(x->d) > 0) {
+    neo_X* x = neo_x(L);
+    if (x != NULL) {
         XEvent xe;
-        XNextEvent(x->d, &xe);
-        dispatch_event(x, &xe);
+        while (XPending(x->d) > 0) {
+            XNextEvent(x->d, &xe);
+            dispatch_event(x, &xe);
+        }
     }
 
     return 0;
@@ -334,9 +332,8 @@ static int cb_prepare(lua_State* L)
 // uv_poll_t callback
 static int cb_poll(lua_State* L)
 {
-    neo_X* x = neo_checkx(L);
-
-    if (lua_isnil(L, 1)) {
+    neo_X* x = neo_x(L);
+    if (x != NULL && lua_isnil(L, 1) && *lua_tostring(L, 2) == 'r') {
         XEvent xe;
         XNextEvent(x->d, &xe);
         dispatch_event(x, &xe);
@@ -352,7 +349,7 @@ static void dispatch_event(neo_X* x, XEvent* xe)
     switch (xe->type) {
     case PropertyNotify:
         if (xe->xproperty.atom == x->atom[timestamp]) {
-            x->delta = time_stamp(xe->xproperty.time);
+            x->delta = time_diff(xe->xproperty.time);
             XSelectInput(x->d, x->w, NoEventMask);
         }
     break;
@@ -581,7 +578,7 @@ static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg)
 
 
 // get ms difference from reference time
-static Time time_stamp(Time ref)
+static Time time_diff(Time ref)
 {
     struct timespec t;
 

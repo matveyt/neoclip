@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -10,8 +10,6 @@
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <sys/signalfd.h>
 #include <wayland-client.h>

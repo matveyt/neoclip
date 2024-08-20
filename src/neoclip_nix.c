@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -55,8 +55,7 @@ static int neo_stop(lua_State* L)
     lua_pushnil(L);
     lua_setfield(L, uv_share, "x");
     // collectgarbage()
-    lua_getglobal(L, "collectgarbage");
-    lua_call(L, 0, 0);
+    lua_gc(L, LUA_GCCOLLECT, 0);
 
     lua_pushnil(L);
     return 1;

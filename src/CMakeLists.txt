@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Aug 19
+    Last Change:    2024 Aug 20
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -16,12 +16,13 @@ set(mac_build   "ON")
 set(x11_build   "ON")
 set(x11uv_build "ON")
 set(wl_build    "ON")
-set(wluv_build  "OFF")
+set(wluv_build  "ON")
 
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
+set(CMAKE_C_EXTENSIONS "OFF")
 set(CMAKE_C_STANDARD "99")
 set(CMAKE_C_STANDARD_REQUIRED "ON")
 set(CMAKE_C_VISIBILITY_PRESET "internal")

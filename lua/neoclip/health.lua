@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Jul 03
+    Last Change:    2024 Aug 20
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -15,6 +15,7 @@ local function neo_check()
         warn = require"health".report_warn,
         error = require"health".report_error,
     }
+    local uv = vim.uv or vim.loop
 
     h.start"neoclip"
 
@@ -74,7 +75,7 @@ local function neo_check()
 
     local reg_plus, reg_star = vim.fn.getreginfo"+", vim.fn.getreginfo"*"
     local line_plus, line_star = "На дворе трава", "На траве дрова"
-    local now = tostring(os.time())
+    local now = tostring(uv.now())
 
     if not neoclip.driver.set("+", { now, line_plus }, "b") then
         h.warn"Driver failed to set register +"
@@ -84,7 +85,7 @@ local function neo_check()
     end
 
     -- for "cache_enabled" provider
-    vim.cmd"sleep 200m"
+    uv.sleep(200)
 
     local test_plus = vim.fn.getreginfo"+"
     vim.fn.setreg("+", reg_plus)

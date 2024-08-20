@@ -1,16 +1,13 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip_nix.h"
-#include <limits.h>
 #include <pthread.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -80,7 +77,7 @@ static int atom2sel(neo_X* x, Atom atom);
 static Atom best_target(neo_X* x, Atom* atom, int count);
 static void client_message(neo_X* x, int message, int param);
 static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg);
-static Time time_stamp(Time ref);
+static Time time_diff(Time ref);
 static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse);
 static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type);
 static int vimg(lua_State* L, const char* var, int d);
@@ -240,7 +237,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
                 memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
                 memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
             }
-            x->stamp[sel] = time_stamp(x->delta);
+            x->stamp[sel] = time_diff(x->delta);
         }
 
         if (offer) {
@@ -268,9 +265,9 @@ static bool neo_lock(neo_X* x, bool lock)
 static void* thread_main(void* X)
 {
     neo_X* x = (neo_X*)X;
-    XSelectInput(x->d, x->w, PropertyChangeMask);
 
     // force property change to get timestamp from X server
+    XSelectInput(x->d, x->w, PropertyChangeMask);
     XChangeProperty(x->d, x->w, x->atom[timestamp], x->atom[timestamp], 32,
         PropModeAppend, NULL, 0);
 
@@ -281,7 +278,7 @@ static void* thread_main(void* X)
         switch (xe.type) {
         case PropertyNotify:
             if (xe.xproperty.atom == x->atom[timestamp]) {
-                x->delta = time_stamp(xe.xproperty.time);
+                x->delta = time_diff(xe.xproperty.time);
                 XSelectInput(x->d, x->w, NoEventMask);
             }
         break;
@@ -557,7 +554,7 @@ static void client_message(neo_X* x, int message, int param)
         .data = {
             .l = {
                 [0] = x->atom[param],
-                [1] = time_stamp(x->delta),
+                [1] = time_diff(x->delta),
             },
         },
     };
@@ -582,7 +579,7 @@ static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg)
 
 
 // get ms difference from reference time
-static Time time_stamp(Time ref)
+static Time time_diff(Time ref)
 {
     struct timespec t;
 

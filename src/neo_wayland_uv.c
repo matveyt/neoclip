@@ -1,14 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip_nix.h"
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wayland-wlr-data-control-client-protocol.h>
@@ -201,10 +199,10 @@ int neo_start(lua_State* L)
         lua_getfield(L, -2, "new_poll");
         lua_pushinteger(L, wl_display_get_fd(x->d));
         lua_call(L, 1, 1);          // poll => stack
-        // uv.poll_start(poll, "r", cb_poll)
+        // uv.poll_start(poll, "rw", cb_poll)
         lua_getfield(L, -3, "poll_start");
         lua_pushvalue(L, -2);
-        lua_pushliteral(L, "r");
+        lua_pushliteral(L, "rw");
         neo_pushcfunction(L, cb_poll);
         lua_call(L, 3, 0);
 
@@ -318,7 +316,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
             zwlr_data_control_device_v1_set_selection(x->dcd, dcs);
         break;
         }
-        wl_display_flush(x->d);
+        wl_display_roundtrip(x->d);
     }
 }
 
@@ -326,12 +324,13 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 // uv_prepare_t callback
 static int cb_prepare(lua_State* L)
 {
-    neo_X* x = neo_checkx(L);
+    neo_X* x = neo_x(L);
+    if (x != NULL) {
+        while (wl_display_prepare_read(x->d) != 0)
+            wl_display_dispatch_pending(x->d);
+        wl_display_flush(x->d);
+    }
 
-    while (wl_display_prepare_read(x->d) != 0)
-        wl_display_dispatch_pending(x->d);
-
-    wl_display_flush(x->d);
     return 0;
 }
 
@@ -339,13 +338,14 @@ static int cb_prepare(lua_State* L)
 // uv_poll_t callback
 static int cb_poll(lua_State* L)
 {
-    neo_X* x = neo_checkx(L);
-
-    if (lua_isnil(L, 1)) {
-        if (wl_display_read_events(x->d) != -1)
-            wl_display_dispatch_pending(x->d);
-    } else {
-        wl_display_cancel_read(x->d);
+    neo_X* x = neo_x(L);
+    if (x != NULL) {
+        if (lua_isnil(L, 1) && *lua_tostring(L, 2) == 'r') {
+            if (wl_display_read_events(x->d) != -1)
+                wl_display_dispatch_pending(x->d);
+        } else {
+            wl_display_cancel_read(x->d);
+        }
     }
 
     return 0;
