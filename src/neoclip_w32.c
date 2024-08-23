@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -24,7 +24,7 @@ static int neo_true(lua_State* L);
 static int neo_get(lua_State* L);
 static int neo_set(lua_State* L);
 static HANDLE get_and_lock(UINT uFormat, LPVOID ppData, size_t* pcbMax);
-static BOOL unlock_and_set(UINT uFormat, HANDLE hData);
+static bool unlock_and_set(UINT uFormat, HANDLE hData);
 static HANDLE mb2wc(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch);
 static HANDLE wc2mb(UINT cp, LPCVOID pSrc, size_t cchSrc, LPVOID ppDst, size_t* pcch);
 
@@ -84,7 +84,7 @@ static int neo_nil(lua_State* L)
 // lua_CFunction() => true
 static int neo_true(lua_State* L)
 {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
 }
 
@@ -102,7 +102,7 @@ static int neo_get(lua_State* L)
 
     // get Vim meta
     int meta[4] = {
-        255,        // type
+        MAUTO,      // type
         INT_MAX,    // ACP len
         INT_MAX,    // UCS len
         0,          // Raw len
@@ -174,8 +174,8 @@ static int neo_set(lua_State* L)
     luaL_checktype(L, 3, LUA_TSTRING);  // regtype
     neo_UD* ud = neo_checkud(L, uv_share);
 
-    BOOL bSuccess = OpenClipboard(NULL);
-    if (bSuccess) {
+    bool success = OpenClipboard(NULL);
+    if (success) {
         EmptyClipboard();
         neo_join(L, 2, "\r\n");
 
@@ -195,7 +195,7 @@ static int neo_set(lua_State* L)
             unlock_and_set(CF_TEXT,
                 wc2mb(ud->uACP, pBuf, cchUCS, &(LPVOID){NULL}, &cchACP));
         }
-        bSuccess = unlock_and_set(CF_UNICODETEXT, hBuf) && bSuccess;
+        success = unlock_and_set(CF_UNICODETEXT, hBuf) && success;
 
         // VimRawBytes
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof("utf-8") + cchSrc);
@@ -204,7 +204,7 @@ static int neo_set(lua_State* L)
             memcpy(pBuf, "utf-8", sizeof("utf-8"));                 // NUL terminated
             memcpy((LPSTR)pBuf + sizeof("utf-8"), pSrc, cchSrc);    // NUL terminated
         }
-        bSuccess = unlock_and_set(ud->uVimRaw, hBuf) && bSuccess;
+        success = unlock_and_set(ud->uVimRaw, hBuf) && success;
 
         // VimClipboard2
         hBuf = GlobalAlloc(GMEM_MOVEABLE, sizeof(int) * 4);
@@ -215,12 +215,12 @@ static int neo_set(lua_State* L)
             *pMeta++ = cchUCS ? cchUCS - 1 : INT_MAX;   // UCS len
             *pMeta   = sizeof("utf-8") + cchSrc - 1;    // Raw len
         }
-        bSuccess = unlock_and_set(ud->uVimMeta, hBuf) && bSuccess;
+        success = unlock_and_set(ud->uVimMeta, hBuf) && success;
 
         CloseClipboard();
     }
 
-    lua_pushboolean(L, bSuccess);
+    lua_pushboolean(L, success);
     return 1;
 }
 
@@ -243,18 +243,18 @@ static HANDLE get_and_lock(UINT uFormat, LPVOID ppData, size_t* pcbMax)
 
 
 // safe set clipboard data
-static BOOL unlock_and_set(UINT uFormat, HANDLE hData)
+static bool unlock_and_set(UINT uFormat, HANDLE hData)
 {
     if (hData == NULL || GlobalUnlock(hData) != 0)
-        return FALSE;
+        return false;
 
     DWORD dwError = GetLastError();
     if ((dwError == NO_ERROR || dwError == ERROR_NOT_LOCKED)
         && SetClipboardData(uFormat, hData) != NULL)
-        return TRUE;
+        return true;
 
     GlobalFree(hData);
-    return FALSE;
+    return false;
 }
 
 

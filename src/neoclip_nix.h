@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 20
+ * Last Change:  2024 Aug 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,17 +12,19 @@
 #if !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200112L
 #endif // _POSIX_C_SOURCE
+
 #include "neoclip.h"
 
 
 // selection index
 enum {
     sel_prim,
+    sel_sec,
     sel_clip,
     sel_total
 };
 
-// incomplete type
+// driver state : incomplete type
 typedef struct neo_X neo_X;
 
 int neo_start(lua_State* L);

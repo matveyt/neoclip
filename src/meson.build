@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Aug 20
+# Last Change:  2024 Aug 23
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -13,21 +13,19 @@ project('neoclip', 'c', license : 'Unlicense', meson_version : '>=0.56.0',
 
 
 # selectively enable module build
-w32_build   = true
-mac_build   = true
-x11_build   = true
-x11uv_build = true
-wl_build    = true
-wluv_build  = true
+w32_target    = true
+mac_target    = true
+x11_target    = true
+x11uv_target  = true
+wl_target     = true
+wluv_target   = true
 
 
 # Lua(JIT) is always required
 lua = dependency('luajit')
 
-
 if host_machine.system() == 'windows'
   # w32-driver
-  w32_target = 'w32-driver'
   w32_sources = ['neoclip_w32.c', 'neo_common.c']
 
 elif host_machine.system() == 'darwin'
@@ -35,7 +33,6 @@ elif host_machine.system() == 'darwin'
   appkit = dependency('AppKit', method : 'extraframework')
 
   # mac-driver
-  mac_target = 'mac-driver'
   mac_sources = ['neoclip_mac.m', 'neo_common.c']
   mac_deps = [appkit]
 
@@ -58,42 +55,37 @@ else # *nix
 
   # x11-driver
   if x11.found() and threads.found()
-    x11_target = 'x11-driver'
     x11_sources = ['neoclip_nix.c', 'neo_x11.c', 'neo_common.c']
     x11_deps = [x11, threads]
   endif
 
   # x11uv-driver
   if x11.found()
-    x11uv_target = 'x11uv-driver'
     x11uv_sources = ['neoclip_nix.c', 'neo_x11_uv.c', 'neo_common.c']
     x11uv_deps = [x11]
   endif
 
   # wl-driver
   if wl_client.found() and is_variable('wlr_data_control') and threads.found()
-    wl_target = 'wl-driver'
-    wl_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c']
-    wl_sources += wlr_data_control
+    wl_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c', wlr_data_control]
     wl_deps = [wl_client, threads]
   endif
 
   # wluv-driver
   if wl_client.found() and is_variable('wlr_data_control')
-    wluv_target = 'wluv-driver'
-    wluv_sources = ['neoclip_nix.c', 'neo_wayland_uv.c', 'neo_common.c']
-    wluv_sources += wlr_data_control
+    wluv_sources = ['neoclip_nix.c', 'neo_wayland_uv.c', 'neo_common.c',
+      wlr_data_control]
     wluv_deps = [wl_client]
   endif
 endif
 
 foreach t : ['w32', 'mac', 'x11', 'x11uv', 'wl', 'wluv']
-  target = get_variable(t + '_target', '')
+  name = t + '-driver'
   sources = get_variable(t + '_sources', [])
   deps = get_variable(t + '_deps', []) + [lua]
-  if target != '' and get_variable(t + '_build', false)
-    message('Building `@0@\' target'.format(t))
-    shared_module(target, sources, dependencies : deps,
+  if get_variable(t + '_target', false) and sources != []
+    message('Building `@0@\''.format(name))
+    shared_module(name, sources, dependencies : deps,
       gnu_symbol_visibility : 'internal', install : true, install_dir : 'lua/neoclip',
       name_prefix : '', name_suffix : host_machine.system() == 'darwin' ? 'so' : [])
   endif

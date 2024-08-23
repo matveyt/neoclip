@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 19
+ * Last Change:  2024 Aug 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -44,9 +44,9 @@ int luaopen_driver(lua_State* L)
     lua_pushvalue(L, 1);    // upvalue 1 : module name
 
 #if defined(luaL_newlibtable)
-    luaL_setfuncs(L, iface, 2);
+    luaL_setfuncs(L, iface, 1);
 #else
-    luaL_openlib(L, NULL, iface, 2);
+    luaL_openlib(L, NULL, iface, 1);
 #endif
     return 1;
 }
@@ -63,7 +63,7 @@ static int neo_nil(lua_State* L)
 // lua_CFunction() => true
 static int neo_true(lua_State* L)
 {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
 }
 
@@ -83,7 +83,7 @@ static int neo_get(lua_State* L)
 
     if (bestType) {
         NSString* str = nil;
-        int type = 255; // MAUTO
+        int type = MAUTO;
 
         // VimPboardType is [NSArray arrayWithObjects:[NSNumber], [NSString]]
         if ([bestType isEqual:VimPboardType]) {
@@ -132,7 +132,7 @@ static int neo_set(lua_State* L)
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     [pb declareTypes:[NSArray arrayWithObjects:VimPboardType, NSPasteboardTypeString,
         nil] owner:nil];
-    BOOL success = [pb setString:str forType:NSPasteboardTypeString]
+    bool success = [pb setString:str forType:NSPasteboardTypeString]
         && [pb setPropertyList:[NSArray arrayWithObjects:[NSNumber numberWithInt:type],
             str, nil] forType:VimPboardType];
 

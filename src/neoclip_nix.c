@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 20
+ * Last Change:  2024 Aug 23
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */

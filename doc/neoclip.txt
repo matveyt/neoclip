@@ -17,8 +17,8 @@ BUILDING						       *neoclip-build*
 |Neoclip| must be built from source. So you'll need C (or Objective C for
 macOS) compiler and tools installed on your machine.
 
-You'll also need a project build tool. Both CMake https://cmake.org and
-Meson https://mesonbuild.com are supported.
+You also need a project build tool. Both CMake https://cmake.org and Meson
+https://mesonbuild.com are supported.
 
 The common build pre-requisite for all platforms is LuaJIT https://luajit.org.
 This is because we're going to make a Lua binary extension module for Neovim's
@@ -67,14 +67,14 @@ FUNCTIONS						   *neoclip-functions*
 has the following fields.
 
 							      |neoclip.driver|
-  This is the binary module doing the real job. You can also call it directly
-  if you wish so. Its methods are >
+  This is a binary module doing real job. You can also call it directly if you
+  wish so. The methods are >
 
   neoclip.driver.id()				-> string
-  neoclip.driver.start()			-> boolean
+  neoclip.driver.start()			-> nil or error
   neoclip.driver.stop()				-> nil
   neoclip.driver.status()			-> boolean
-  neoclip.driver.get(reg)			-> { string_array, type }
+  neoclip.driver.get(reg)			-> {string_array, type}
   neoclip.driver.set(reg, string_array, type)	-> boolean
 <
   NOTE: start/stop/status are only functional under *nix OS. In Windows and
@@ -121,23 +121,21 @@ KNOWN ISSUES						      *neoclip-issues*
 					      *neoclip-gnome* *neoclip-weston*
 neoclip/Wayland module requires wlr-data-control protocol
 https://wayland.app/protocols/wlr-data-control-unstable-v1. If your Wayland
-compositor does not provide it then neoclip/X11 will be tried instead.
+compositor does not provide it then neoclip/X11 will be loaded instead.
 
-								 *neoclip-wsl*
-For some obscure reason, WSLg/Weston/XWayland fails to read TARGETS response,
-and so |neoclip| will not set native Windows Clipboard when run under WSL. If
-you can figure why then, please, let me know.
+								 *neoclip-luv*
+There are two new driver versions for *nix: `neoclip.wluv-driver` and
+`neoclip.x11uv-driver`. They are still considered experimental and not used by
+default. The main difference is that they depend on |luv-event-loop| not
+requiring an extra thread. If you want to try it then pass driver name
+directly: >
 
-							*neoclip-targets-atom*
-This is an experimental feature for X11 platform only. By default |neoclip|
-responds to TARGETS selection request with an atom of the type, well, ATOM.
-This is what the standard says. But, if you need to, you may force usage of
-TARGETS atom instead by adding this line of code >
-    " in VimScript
-    let g:neoclip_targets_atom = 0
-
-    -- or in Lua
-    vim.g.neoclip_targets_atom = false
+  lua neoclip:setup"neoclip.wluv-driver"
 <
+								 *neoclip-wsl*
+There was a longstanding bug that made |neoclip| to fail on WSL. Now it's no
+more! Still to remember that WSLg is based on Weston composer, so
+|neoclip-weston| issue applies.
+
 ==============================================================================
  vim:tw=78:ts=8:noet:ft=help:norl:

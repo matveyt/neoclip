@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Aug 19
+    Last Change:    2024 Aug 23
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -114,16 +114,12 @@ function neoclip:setup(driver)
     elseif has"unix" then
         -- Wayland first, fallback to X11
         local _ = vim.env.WAYLAND_DISPLAY
-            and (self:require"neoclip.wluv-driver" or self:require"neoclip.wl-driver")
-            or (self:require"neoclip.x11uv-driver" or self:require"neoclip.x11-driver")
+            and (self:require"neoclip.wl-driver" or self:require"neoclip.wluv-driver")
+            or (self:require"neoclip.x11-driver" or self:require"neoclip.x11uv-driver")
     else
         self:issue"Unsupported platform"
     end
 
-    -- doesn't work with WSL
-    if has"wsl" then
-        self:issue"|neoclip-wsl| support is currently broken"
-    end
     -- warn if clipboard=unnamed[plus]
     if vim.go.clipboard ~= "" then
         self:issue("'clipboard' option is set to *%s*", vim.go.clipboard)

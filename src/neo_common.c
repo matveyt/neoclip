@@ -1,12 +1,46 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 20
+ * Last Change:  2024 Aug 23
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip.h"
+
+
+// lua_CFunction(uv_module) => string
+int neo_id(lua_State* L)
+{
+    // name = string.match(module_name, "(%w+)-")
+    lua_getglobal(L, "string");
+    lua_getfield(L, -1, "match");
+    lua_pushvalue(L, uv_module);
+    lua_pushliteral(L, "(%w+)-");
+    lua_call(L, 2, 1);
+
+    // return "neoclip/" .. name
+    lua_pushliteral(L, "neoclip/");
+    const char* name = lua_tostring(L, -2);
+    if (name == NULL)
+        lua_pushliteral(L, "Unknown");
+    else if (strcmp(name, "w32") == 0)
+        lua_pushliteral(L, "WinAPI");
+    else if (strcmp(name, "mac") == 0)
+        lua_pushliteral(L, "AppKit");
+    else if (strcmp(name, "wl") == 0)
+        lua_pushliteral(L, "Wayland+pthreads");
+    else if (strcmp(name, "wluv") == 0)
+        lua_pushliteral(L, "Wayland+luv");
+    else if (strcmp(name, "x11") == 0)
+        lua_pushliteral(L, "X11+pthreads");
+    else if (strcmp(name, "x11uv") == 0)
+        lua_pushliteral(L, "X11+luv");
+    else
+        lua_pushvalue(L, -2);
+    lua_concat(L, 2);
+    return 1;
+}
 
 
 // table concatenation (numeric indices only)
@@ -96,43 +130,9 @@ void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type)
 
     // save result
     lua_rawseti(L, ix, 1);
-    lua_pushlstring(L, type == 0 ? "v" : type == 1 ? "V" : type == 2 ? "\026" :
-        (state >= 0 && off > 0) ? "v" : "V", sizeof(char));
+    lua_pushlstring(L, type == MCHAR ? "v" : type == MLINE ? "V" :
+        type == MBLOCK ? "\026" : (state >= 0 && off > 0) ? "v" : "V", sizeof(char));
     lua_rawseti(L, ix, 2);
-}
-
-
-// lua_CFunction() => string
-int neo_id(lua_State* L)
-{
-    // name = string.match(module_name, "(%w+)-")
-    lua_getglobal(L, "string");
-    lua_getfield(L, -1, "match");
-    lua_pushvalue(L, uv_module);
-    lua_pushliteral(L, "(%w+)-");
-    lua_call(L, 2, 1);
-
-    // return "neoclip/" .. name
-    lua_pushliteral(L, "neoclip/");
-    const char* name = lua_tostring(L, -2);
-    if (name == NULL)
-        lua_pushliteral(L, "Unknown");
-    else if (strcmp(name, "w32") == 0)
-        lua_pushliteral(L, "WinAPI");
-    else if (strcmp(name, "mac") == 0)
-        lua_pushliteral(L, "AppKit");
-    else if (strcmp(name, "wl") == 0)
-        lua_pushliteral(L, "Wayland+pthreads");
-    else if (strcmp(name, "wluv") == 0)
-        lua_pushliteral(L, "Wayland+luv");
-    else if (strcmp(name, "x11") == 0)
-        lua_pushliteral(L, "X11+pthreads");
-    else if (strcmp(name, "x11uv") == 0)
-        lua_pushliteral(L, "X11+luv");
-    else
-        lua_pushvalue(L, -2);
-    lua_concat(L, 2);
-    return 1;
 }
 
 

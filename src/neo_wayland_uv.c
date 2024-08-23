@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 20
+ * Last Change:  2024 Aug 23
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -110,8 +110,8 @@ struct neo_X {
 
 // supported mime types (from best to worst)
 static const char* mime[] = {
-    "_VIMENC_TEXT",
-    "_VIM_TEXT",
+    [0] = "_VIMENC_TEXT",
+    [1] = "_VIM_TEXT",
     "text/plain;charset=utf-8",
     "text/plain",
     "UTF8_STRING",
@@ -148,12 +148,13 @@ int neo_start(lua_State* L)
         listen_init();
 
         // read globals from Wayland registry
-        struct wl_registry* reg = wl_display_get_registry(x->d);
-        listen_to(reg, INDEX(registry), x);
+        struct wl_registry* registry = wl_display_get_registry(x->d);
+        listen_to(registry, INDEX(registry), x);
         x->seat = NULL, x->dcm = NULL;
         wl_display_roundtrip(x->d);
-        wl_registry_destroy(reg);
-        if (x->seat == NULL || x->dcm == NULL) {
+        wl_registry_destroy(registry);
+        if (x->dcm == NULL) {
+            wl_seat_release(x->seat);
             wl_display_disconnect(x->d);
             lua_pushliteral(L, "no support for wlr-data-control protocol");
             return lua_error(L);
@@ -179,16 +180,17 @@ int neo_start(lua_State* L)
         lua_setfield(L, uv_share, "x");
 
         // start polling the display
-        lua_getglobal(L, "vim");    // vim => stack
-        lua_getfield(L, -1, "uv");  // uv or loop => stack
+        lua_getglobal(L, "vim");                // vim.uv or vim.loop => stack
+        lua_getfield(L, -1, "uv");
         if (lua_isnil(L, -1)) {
             lua_pop(L, 1);
             lua_getfield(L, -1, "loop");
         }
+        lua_replace(L, -2);
 
         // local prepare = uv.new_prepare()
         lua_getfield(L, -1, "new_prepare");
-        lua_call(L, 0, 1);          // prepare => stack
+        lua_call(L, 0, 1);                      // prepare => stack
         // uv.prepare_start(prepare, cb_prepare)
         lua_getfield(L, -2, "prepare_start");
         lua_pushvalue(L, -2);
@@ -198,7 +200,7 @@ int neo_start(lua_State* L)
         // local poll = uv.new_poll(wl_display_get_fd(x->d))
         lua_getfield(L, -2, "new_poll");
         lua_pushinteger(L, wl_display_get_fd(x->d));
-        lua_call(L, 1, 1);          // poll => stack
+        lua_call(L, 1, 1);                      // poll => stack
         // uv.poll_start(poll, "rw", cb_poll)
         lua_getfield(L, -3, "poll_start");
         lua_pushvalue(L, -2);
@@ -207,11 +209,11 @@ int neo_start(lua_State* L)
         lua_call(L, 3, 0);
 
         // uv_share.poll = poll
-        lua_setfield(L, uv_share, "poll");
+        lua_setfield(L, uv_share, "poll");      // poll <= stack
         // uv_share.prepare = prepare
-        lua_setfield(L, uv_share, "prepare");
+        lua_setfield(L, uv_share, "prepare");   // prepare <= stack
         // uv_share.uv = vim.uv or vim.loop
-        lua_setfield(L, uv_share, "uv");
+        lua_setfield(L, uv_share, "uv");        // vim.uv or vim.loop <= stack
     }
 
     lua_pushnil(L);
@@ -222,19 +224,17 @@ int neo_start(lua_State* L)
 // destroy state
 static int neo__gc(lua_State* L)
 {
-    // cannot checkudata anymore
-    neo_X* x = lua_touserdata(L, 1);
+    neo_X* x = (neo_X*)neo_checkud(L, 1);
 
     lua_getfield(L, uv_share, "uv");    // uv or loop => stack
-
-    // vim.uv.poll_stop(uv_share.poll)
+    // uv.poll_stop(uv_share.poll)
     lua_getfield(L, -1, "poll_stop");
     lua_getfield(L, uv_share, "poll");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 2);
     } else {
         lua_call(L, 1, 0);
-        // vim.uv.close(poll)
+        // uv.close(poll)
         lua_getfield(L, -1, "close");
         lua_getfield(L, uv_share, "poll");
         lua_call(L, 1, 0);
@@ -243,14 +243,14 @@ static int neo__gc(lua_State* L)
         lua_setfield(L, uv_share, "poll");
     }
 
-    // vim.uv.prepare_stop(prepare)
+    // uv.prepare_stop(prepare)
     lua_getfield(L, -1, "prepare_stop");
     lua_getfield(L, uv_share, "prepare");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 2);
     } else {
         lua_call(L, 1, 0);
-        // vim.uv.close(prepare)
+        // uv.close(prepare)
         lua_getfield(L, -1, "close");
         lua_getfield(L, uv_share, "prepare");
         lua_call(L, 1, 0);
@@ -260,13 +260,12 @@ static int neo__gc(lua_State* L)
     }
 
     // clear data
-    if (x != NULL) {
-        for (int i = 0; i < sel_total; ++i)
-            free(x->data[i]);
-        zwlr_data_control_device_v1_destroy(x->dcd);
-        zwlr_data_control_manager_v1_destroy(x->dcm);
-        wl_display_disconnect(x->d);
-    }
+    for (int i = 0; i < sel_total; ++i)
+        free(x->data[i]);
+    zwlr_data_control_device_v1_destroy(x->dcd);
+    zwlr_data_control_manager_v1_destroy(x->dcm);
+    wl_seat_release(x->seat);
+    wl_display_disconnect(x->d);
 
     return 0;
 }
@@ -286,18 +285,15 @@ void neo_fetch(lua_State* L, int ix, int sel)
 
 
 // own new selection
-// (cb == 0) => empty selection, (cb == SIZE_MAX) => keep selection
+// (cb == 0) => empty selection
 void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type)
 {
-    // set new data
-    if (cb < SIZE_MAX) {
-        // _VIMENC_TEXT: type 'encoding' NUL text
-        cb = alloc_data(x, sel, cb);
-        if (cb > 0) {
-            x->data[sel][0] = type;
-            memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
-            memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
-        }
+    // _VIMENC_TEXT: type 'encoding' NUL text
+    cb = alloc_data(x, sel, cb);
+    if (cb > 0) {
+        x->data[sel][0] = type;
+        memcpy(x->data[sel] + 1, "utf-8", sizeof("utf-8"));
+        memcpy(x->data[sel] + 1 + sizeof("utf-8"), ptr, cb);
     }
 
     if (offer) {
@@ -316,6 +312,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
             zwlr_data_control_device_v1_set_selection(x->dcd, dcs);
         break;
         }
+        wl_display_flush(x->d);
         wl_display_roundtrip(x->d);
     }
 }
@@ -340,12 +337,11 @@ static int cb_poll(lua_State* L)
 {
     neo_X* x = neo_x(L);
     if (x != NULL) {
-        if (lua_isnil(L, 1) && *lua_tostring(L, 2) == 'r') {
-            if (wl_display_read_events(x->d) != -1)
-                wl_display_dispatch_pending(x->d);
-        } else {
+        if (lua_isnil(L, 1) && strchr(lua_tostring(L, 2), 'r') != NULL)
+            wl_display_read_events(x->d);
+        else
             wl_display_cancel_read(x->d);
-        }
+        wl_display_dispatch_pending(x->d);
     }
 
     return 0;
@@ -494,7 +490,7 @@ static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer
     if (best_mime >= 0 && best_mime < COUNTOF(mime)) {
         size_t cb;
         uint8_t* ptr = offer_read(x, offer, mime[best_mime], &cb);
-        int type = (cb > 0 && best_mime <= 1) ? ptr[0] : 255;
+        int type = (cb > 0 && best_mime <= 1) ? ptr[0] : MAUTO;
 
         void* data = ptr;
         if (cb == 0) {

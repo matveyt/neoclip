@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 20
+ * Last Change:  2024 Aug 23
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -9,7 +9,6 @@
 #ifndef NEOCLIP_H
 #define NEOCLIP_H
 
-#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -21,18 +20,26 @@
 #include <lauxlib.h>
 
 
+// Vim register type
+enum {
+    MCHAR = 0,
+    MLINE = 1,
+    MBLOCK = 2,
+    MAUTO = 255,
+};
+
 enum {
     uv_module = lua_upvalueindex(1),    // module name
     uv_share = lua_upvalueindex(2),     // shared value (table or userdata)
 };
 
-// incomplete type
+// userdata : incomplete type
 typedef struct neo_UD neo_UD;
 
 // neo_common.c
+int neo_id(lua_State* L);   // lua_CFunction(uv_module) => string
 void neo_join(lua_State* L, int ix, const char* sep);
 void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type);
-int neo_id(lua_State* L);                               // lua_CFunction() => string
 void neo_inspect(lua_State* L, int ix);                 // debug only
 void neo_printf(lua_State* L, const char* fmt, ...);    // debug only
 
@@ -40,6 +47,17 @@ void neo_printf(lua_State* L, const char* fmt, ...);    // debug only
 static inline int neo_absindex(lua_State *L, int ix)
 {
     return (0 > ix && ix > LUA_REGISTRYINDEX) ? (ix + 1 + lua_gettop(L)) : ix;
+}
+static inline bool neo_did(lua_State* L, const char* what)
+{
+    lua_getfield(L, LUA_REGISTRYINDEX, what);
+    bool did = lua_toboolean(L, -1);
+    if (!did) {
+        lua_pushboolean(L, true);
+        lua_setfield(L, LUA_REGISTRYINDEX, what);
+    }
+    lua_pop(L, 1);
+    return did;
 }
 static inline void neo_pushcfunction(lua_State* L, lua_CFunction fn)
 {
@@ -52,15 +70,15 @@ static inline int neo_type(int ch)
     switch (ch) {
     case 'c':
     case 'v':
-        return 0;   // MCHAR
+        return MCHAR;
     case 'l':
     case 'V':
-        return 1;   // MLINE
+        return MLINE;
     case 'b':
     case '\026':
-        return 2;   // MBLOCK
+        return MBLOCK;
     default:
-        return 255; // MAUTO
+        return MAUTO;
     }
 }
 static inline neo_UD* neo_checkud(lua_State* L, int ix)
