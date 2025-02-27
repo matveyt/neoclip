@@ -37,11 +37,11 @@
           buildPhase = ''
             cmake -S $src -B build
             cmake --build build
-            # strip -s *.so
           '';
 
           installPhase = ''
             mkdir $out
+            strip -s build/*.so
             mv build/*.so $out
           '';
 
