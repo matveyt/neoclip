@@ -46,9 +46,9 @@
           '';
 
           meta = with pkgs.lib; {
-            homepage = "https://github.com/MordragT/nix-templates/tree/master/cpp";
+            homepage = "https://github.com/matveyt/neoclip";
             description = "Multi-platform clipboard provider for neovim w/o extra dependencies";
-            licencse = licenses.mit;
+            licencse = licenses.unlicense;
             platforms = platforms.all;
             maintainers = ["slava.istomin@tuta.io"];
           };
