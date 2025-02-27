@@ -42,9 +42,7 @@
           '';
 
           installPhase = ''
-            mkdir $out
-            strip -s build/*${ext}
-            mv build/*${ext} $out
+            cmake --install build --strip --prefix $out
           '';
 
           meta = with pkgs.lib; {
@@ -55,20 +53,19 @@
             maintainers = ["slava.istomin@tuta.io"];
           };
         };
-      in {
-        packages.default = pkgs.vimUtils.buildVimPlugin {
+        neoclip-lua-only = pkgs.vimUtils.buildVimPlugin {
           pname = "neoclip";
           inherit version;
 
           src = ./.;
 
           unpackPhase = ''
-            cp -r $src/{doc,lua} .
+            cp -r $src/{lua,doc} .
           '';
-
-          postInstall = ''
-            cp ${neoclip-lib}/* $out
-          '';
+        };
+      in {
+        packages.default = neoclip-lua-only.overrideAttrs {
+          dependencies = [ neoclip-lib ];
         };
 
         devShells.default = pkgs.mkShell {
