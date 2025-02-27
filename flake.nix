@@ -10,6 +10,18 @@
     utils.lib.eachDefaultSystem (
       system: let
         pkgs = import nixpkgs {inherit system;};
+        nativeBuildInputs = [
+            pkgs.cmake
+            pkgs.extra-cmake-modules
+            pkgs.libffi
+            pkgs.pkg-config
+          ];
+        buildInputs = [
+            pkgs.luajit_2_1
+            pkgs.wayland
+            pkgs.wayland-scanner
+            pkgs.xorg.libX11
+          ];
       in {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "neoclip";
@@ -17,20 +29,8 @@
 
           src = ./src;
 
-          /* TODO extract? */
-          nativeBuildInputs = [
-            pkgs.cmake
-            pkgs.extra-cmake-modules
-            pkgs.libffi
-            pkgs.pkg-config
-          ];
-
-          buildInputs = [
-            pkgs.luajit_2_1
-            pkgs.wayland
-            pkgs.wayland-scanner
-            pkgs.xorg.libX11
-          ];
+          inherit nativeBuildInputs;
+          inherit buildInputs;
 
           cmakeFlags = [];
 
@@ -54,17 +54,8 @@
           };
         };
 
-        devShells.default = pkgs.mkShell rec {
-          buildInputs = [
-            pkgs.luajit_2_1
-            pkgs.cmake
-            pkgs.extra-cmake-modules
-            pkgs.libffi
-            pkgs.pkg-config
-            pkgs.xorg.libX11
-            pkgs.wayland
-            pkgs.wayland-scanner
-          ];
+        devShells.default = pkgs.mkShell {
+          buildInputs = nativeBuildInputs ++ buildInputs;
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
         };
