@@ -10,8 +10,9 @@
     utils.lib.eachDefaultSystem (
       system: let
         pkgs = import nixpkgs {inherit system;};
+        ext = pkgs.stdenv.hostPlatform.extensions.sharedLibrary;
+
         version = "0.0.0"; # TODO
-        inherit (self) outputs;
         nativeBuildInputs = [
             pkgs.cmake
             pkgs.extra-cmake-modules
@@ -24,8 +25,7 @@
             pkgs.wayland-scanner
             pkgs.xorg.libX11
           ];
-      in {
-        packages.lib = pkgs.stdenv.mkDerivation {
+        neoclip-lib = pkgs.stdenv.mkDerivation {
           pname = "neoclip-lib";
           inherit version;
 
@@ -43,8 +43,8 @@
 
           installPhase = ''
             mkdir $out
-            strip -s build/*.so
-            mv build/*.so $out
+            strip -s build/*${ext}
+            mv build/*${ext} $out
           '';
 
           meta = with pkgs.lib; {
@@ -55,19 +55,19 @@
             maintainers = ["slava.istomin@tuta.io"];
           };
         };
-
+      in {
         packages.default = pkgs.vimUtils.buildVimPlugin {
           pname = "neoclip";
           inherit version;
 
           src = ./.;
 
-          installPhase = ''
-            mv doc/ lua/ $out
+          unpackPhase = ''
+            cp -r $src/{doc,lua} .
           '';
 
-          postInstallPhase = ''
-            cp "${outputs.lib}/*" $out
+          postInstall = ''
+            cp ${neoclip-lib}/* $out
           '';
         };
 
