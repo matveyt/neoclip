@@ -1,4 +1,5 @@
 {
+  # TODO ? flake examples : overlay and package ?
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
   inputs.utils.url = "github:numtide/flake-utils";
 
@@ -75,8 +76,8 @@
       }
     )
     // {
-      overlays.default = self: pkgs: {
-        vimPlugins.neoclip = self.packages."${pkgs.system}".default;
+      overlays.default = final: prev: {
+        vimPlugins.neoclip = self.outputs.packages."${final.system}".default;
       };
     };
 }
