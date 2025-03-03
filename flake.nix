@@ -10,7 +10,6 @@
     utils.lib.eachDefaultSystem (
       system: let
         pkgs = import nixpkgs {inherit system;};
-        ext = pkgs.stdenv.hostPlatform.extensions.sharedLibrary;
 
         version = "0.0.0"; # TODO
         nativeBuildInputs = [
@@ -48,7 +47,7 @@
           meta = with pkgs.lib; {
             homepage = "https://github.com/matveyt/neoclip";
             description = "Multi-platform clipboard provider for neovim w/o extra dependencies";
-            licencse = licenses.unlicense;
+            license = licenses.unlicense;
             platforms = platforms.all;
             maintainers = ["slava.istomin@tuta.io"];
           };
@@ -63,16 +62,16 @@
             cp -r $src/{lua,doc} .
           '';
         };
-      in {
-        packages.default = neoclip-lua-only.overrideAttrs {
+        neoclip = neoclip-lua-only.overrideAttrs {
           dependencies = [ neoclip-lib ];
         };
-
-        devShells.default = pkgs.mkShell {
+        shell = pkgs.mkShell {
           buildInputs = nativeBuildInputs ++ buildInputs;
-
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
         };
+      in {
+        packages.default = neoclip;
+        devShells.default = shell;
       }
     )
     // {
