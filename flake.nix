@@ -76,7 +76,7 @@
     )
     // {
       overlays.default = self: pkgs: {
-        hello = self.packages."${pkgs.system}".hello;
+        vimPlugins.neoclip = self.packages."${pkgs.system}".default;
       };
     };
 }
