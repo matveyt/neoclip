@@ -8,6 +8,24 @@ Read `:h provider-clipboard` for more information on Neovim clipboard integratio
 
 ### Installation
 
+#### With Homebrew
+
+1. Get the files of the plugin
+``` sh
+    brew install shofel/neoclip/neoclip
+```
+1. To use the plugin in neovim, add these lines to your neovim config
+``` lua
+    vim.opt.rtp += string.sub(vim.system({'brew', '--prefix', 'neoclip'}):wait().stdout, 1, -2)
+    require('neoclip'):setup()
+```
+1. Restart neovim, and check health
+``` vim
+    :checkhealth neoclip
+```
+
+#### Manually from Source
+
 First, fetch the plugin using any plugin manager you like, or simply clone it with `git`
 under your packages directory tree, see `:h packages`.
 
