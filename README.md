@@ -16,7 +16,7 @@ Read `:h provider-clipboard` for more information on Neovim clipboard integratio
 ```
 1. To use the plugin in neovim, add these lines to your neovim config
 ``` lua
-    vim.opt.rtp += string.sub(vim.system({'brew', '--prefix', 'neoclip'}):wait().stdout, 1, -2)
+    vim.opt.rtp:append(string.sub(vim.system({'brew', '--prefix', 'neoclip'}):wait().stdout, 1, -2))
     require('neoclip'):setup()
 ```
 1. Restart neovim, and check health
