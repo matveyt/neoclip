@@ -16,7 +16,6 @@
         nativeBuildInputs = [
             pkgs.cmake
             pkgs.extra-cmake-modules
-            pkgs.libffi
             pkgs.pkg-config
           ];
         buildInputs = [
