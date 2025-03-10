@@ -94,6 +94,8 @@ function neoclip:register(clipboard)
 end
 
 function neoclip:setup(driver)
+    assert(self, "please, invoke method with colon: neoclip:setup()")
+
     -- local helper
     local has = function(feat) return vim.fn.has(feat) == 1 end
 
