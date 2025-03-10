@@ -94,10 +94,7 @@ function neoclip:register(clipboard)
 end
 
 function neoclip:setup(driver)
-    if self == nil then
-        -- TODO make setup call optional. Just gracefully do all the job
-        error "please call the method with a colon instead of a dot: neoclip:setup()"
-    end
+    assert(self, "lease, invoke method with colon: neoclip:setup()")
 
     -- local helper
     local has = function(feat) return vim.fn.has(feat) == 1 end
