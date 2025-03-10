@@ -24,6 +24,12 @@ Read `:h provider-clipboard` for more information on Neovim clipboard integratio
     :checkhealth neoclip
 ```
 
+#### As a Nix Flake
+
+Please refer to examples in the [neoclip-flake](https://github.com/neoclip-nvim/neoclip-flake/) repository:
+- an [example](https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-overlay/flake.nix) which uses an overlay
+- an [example](https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-package/flake.nix) which uses a package directly
+
 #### Manually from Source
 
 First, fetch the plugin using any plugin manager you like, or simply clone it with `git`
