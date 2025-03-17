@@ -1,41 +1,18 @@
 ### Description
 
-This is [Neovim](https://neovim.io) clipboard provider. It allows to access system
-clipboard without any extra tools, such as `win32yank`, `xclip`, `xsel`, `pbcopy`,
-`pbpaste` and so on.
+This is [Neovim][1] clipboard provider. It allows to access system clipboard without any
+extra tools, such as `win32yank`, `xclip`, `xsel`, `pbcopy`, `pbpaste` and so on.
 
 Read `:h provider-clipboard` for more information on Neovim clipboard integration.
 
 ### Installation
 
-#### With Homebrew
-
-1. Get the files of the plugin
-``` sh
-    brew install shofel/neoclip/neoclip
-```
-1. To use the plugin in neovim, add these lines to your neovim config
-``` lua
-    vim.opt.rtp:append(string.sub(vim.system({'brew', '--prefix', 'neoclip'}):wait().stdout, 1, -2))
-    require('neoclip'):setup()
-```
-1. Restart neovim, and check health
-``` vim
-    :checkhealth neoclip
-```
-
-#### As a Nix Flake
-
-Please refer to examples in the [neoclip-flake](https://github.com/neoclip-nvim/neoclip-flake/) repository:
-- an [example](https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-overlay/flake.nix) which uses an overlay
-- an [example](https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-package/flake.nix) which uses a package directly
-
-#### Manually from Source
+#### From source code
 
 First, fetch the plugin using any plugin manager you like, or simply clone it with `git`
 under your packages directory tree, see `:h packages`.
 
-An example assuming you have [minpac](https://github.com/k-takata/minpac):
+An example for [minpac][2]
 
 1. Add to your `init.vim`
 ```
@@ -45,7 +22,6 @@ An example assuming you have [minpac](https://github.com/k-takata/minpac):
 
     if has('nvim')
         packadd! neoclip
-        lua require"neoclip":setup()
     endif
 ```
 
@@ -80,8 +56,25 @@ Next, drop to your shell and compile platform-dependent module from source.
     :checkhealth neoclip
 ```
 
+#### With Homebrew
+
+There is a formula for `Homebrew` in [homebrew-neoclip][3] repository.
+
+#### As a Nix Flake
+
+Please, refer to [neoclip-flake][4] repository:
+- an [example][5] which uses an overlay
+- an [example][6] which uses a package directly
+
 ### Compatibility and other troubles
 
-Currently Neoclip should run on Windows, macOS and all the various \*nix'es (with X11
-and/or Wayland display server). See `:h neoclip-build` to get more information on build
+Neoclip should run on Windows, macOS and all the various \*nix'es (with X11 and/or
+Wayland display server). See `:h neoclip-build` to get more information on build
 dependencies. See `:h neoclip-issues` for a list of known issues.
+
+[1]: https://neovim.io
+[2]: https://github.com/k-takata/minpac
+[3]: https://github.com/neoclip-nvim/homebrew-neoclip
+[4]: https://github.com/neoclip-nvim/neoclip-flake
+[5]: https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-overlay/flake.nix
+[6]: https://github.com/neoclip-nvim/neoclip-flake/blob/master/examples/with-package/flake.nix

@@ -12,6 +12,21 @@ to access system clipboard without any external tools, such as `win32yank`,
 Supported platforms are Windows, macOS and *nix (with X11 or Wayland).
 
 ==============================================================================
+AUTOLOAD						    *neoclip-autoload*
+
+|Neoclip| is loaded by default. You don't need to add anything to your
+|config|. Yet if you wish to skip it then configure another
+|provider-clipboard|. E.g., `:runtime autoload/provider/clipboard.vim` to use
+Neovim's default instead.
+
+If you share same |config| between Vim and Neovim then it is advisable to
+install |neoclip| under `opt/` tree and use |:packadd| command >
+
+    if has('nvim')
+        packadd! neoclip
+    endif
+<
+==============================================================================
 BUILDING						       *neoclip-build*
 
 |Neoclip| must be built from source. So you'll need C (or Objective C for
@@ -35,12 +50,12 @@ installed, while some are not. An example suitable for Debian GNU/Linux >
 <
 And the final point. CMake doesn't support Wayland libraries out-of-the-box.
 So building the project with CMake may require installing ECM (aka Extra CMake
-Modules) package as well. Otherwise neoclip/Wayland module would be quietly
+Modules) package as well. Otherwise, neoclip/Wayland module would be quietly
 skipped. >
 
     $sudo apt install extra-cmake-modules
 <
-So now we should be able to build our project >
+So now we are able to build our project >
 
     $ cd ~/.config/nvim/pack/bundle/opt/neoclip/src
 
@@ -55,7 +70,6 @@ So now we should be able to build our project >
 <
 Then run Neovim and type >
 
-    :lua require"neoclip":setup()
     :checkhealth neoclip
 <
 to see if everything went okay.
@@ -63,8 +77,7 @@ to see if everything went okay.
 ==============================================================================
 FUNCTIONS						   *neoclip-functions*
 
-|Neoclip| stores its module table in a global Lua variable named |neoclip|. It
-has the following fields.
+|Neoclip| returns a module table that has the following fields.
 
 							      |neoclip.driver|
   This is a binary module doing real job. You can also call it directly if you
@@ -80,34 +93,32 @@ has the following fields.
   NOTE: start/stop/status are only functional under *nix OS. In Windows and
   macOS they are doing nothing.
 
-							   |neoclip:require()|
+							   |neoclip.require()|
   This method loads binary module into |neoclip.driver| variable. You seldom
-  need it as |neoclip:setup()| calls it for you. >
+  need it as |neoclip.setup()| calls it for you. >
 
-  " force loading of X11 driver only
-  lua neoclip:require"neoclip.x11-driver"
-  lua neoclip:register()
+  -- force loading of X11 driver only
+  local neoclip = require"neoclip"
+  neoclip.require"neoclip.x11-driver"
+  neoclip.register()
 <
-							   |neoclip:register()|
+							   |neoclip.register()|
   This method sets or resets |g:clipboard| variable activating the plugin.
-  Usually, you want to call |neoclip:setup()| only. >
+  Usually, you want to call |neoclip.setup()| only. >
 
-  " disable clipboard temporarily
-  lua neoclip:register{false}
+  -- set Neovim default clipboard-tool
+  require"neoclip".register{}
 
-  " set default Neovim clipboard
-  lua neoclip:register{}
-
-  " get neoclip back
-  lua neoclip:register()
+  -- get neoclip.driver back
+  require"neoclip".register()
 <
-							      |neoclip:setup()|
-  This is the only method you need to add to your |config|. Basically, it is
-  an equivalent of |neoclip:require()| followed by |neoclip:register()|.
-  Optionally, it accepts driver name to pass to |neoclip:require()|. >
+							      |neoclip.setup()|
+  This method performs module initialization. Basically, it is an equivalent
+  of |neoclip.require()| followed by |neoclip.register()|. Optionally, it also
+  accepts driver name to pass to |neoclip.require()|. >
 
-  " add this line to your config
-  lua require"neoclip":setup()
+  -- load and register default driver
+  require"neoclip".setup()
 <
 ==============================================================================
 HEALTH							      *neoclip-health*
@@ -127,10 +138,10 @@ compositor does not provide it then neoclip/X11 will be loaded instead.
 There are two new driver versions for *nix: `neoclip.wluv-driver` and
 `neoclip.x11uv-driver`. They are still considered experimental and not used by
 default. The main difference is that they depend on |luv-event-loop| not
-requiring an extra thread. If you want to try it then pass driver name
-directly: >
+requiring an extra thread. If you want to try it then pass the driver name
+directly >
 
-  lua neoclip:setup"neoclip.wluv-driver"
+  require"neoclip".setup"neoclip.wluv-driver"
 <
 								 *neoclip-wsl*
 There was a longstanding bug that made |neoclip| to fail on WSL. Now it's no
