@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2025 Mar 17
+    Last Change:    2025 Mar 26
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -76,9 +76,7 @@ function neoclip.register(clipboard)
             ]]
         end
     else
-        assert(type(clipboard) == "table", "table or nil expected")
-        vim.g.clipboard = clipboard.copy and clipboard.paste and clipboard
-            or clipboard[1] -- neoclip.register{false}
+        vim.g.clipboard = clipboard
         vim.cmd[[
             if exists("#neoclip")
                 autocmd! neoclip
@@ -96,7 +94,7 @@ function neoclip.setup(arg1, arg2)
     -- local helper function
     local has = function(feat) return vim.fn.has(feat) == 1 end
 
-    -- compat: allow calling both neoclip:setup() and neoclip.setup()
+    -- compat: accept both neoclip:setup() and neoclip.setup()
     local driver = (arg1 ~= neoclip) and arg1 or arg2
 
     -- (re-)init self
@@ -124,7 +122,7 @@ function neoclip.setup(arg1, arg2)
         neoclip.issue"Unsupported platform"
     end
 
-    -- warn if clipboard=unnamed[plus]
+    -- warn if &clipboard is unnamed[plus]
     if vim.go.clipboard ~= "" then
         neoclip.issue("'clipboard' option is set to *%s*", vim.go.clipboard)
     end

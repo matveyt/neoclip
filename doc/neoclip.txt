@@ -107,7 +107,7 @@ FUNCTIONS						   *neoclip-functions*
   Usually, you want to call |neoclip.setup()| only. >
 
   -- set Neovim default clipboard-tool
-  require"neoclip".register{}
+  require"neoclip".register(false)
 
   -- get neoclip.driver back
   require"neoclip".register()
