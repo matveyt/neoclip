@@ -130,9 +130,10 @@ current status.
 KNOWN ISSUES						      *neoclip-issues*
 
 					      *neoclip-gnome* *neoclip-weston*
-neoclip/Wayland module requires wlr-data-control protocol
-https://wayland.app/protocols/wlr-data-control-unstable-v1. If your Wayland
-compositor does not provide it then neoclip/X11 will be loaded instead.
+neoclip/Wayland module requires ext-data-control protocol
+https://wayland.app/protocols/ext-data-control-v1, formerly known as
+wlr-data-control protocol. If your Wayland compositor does not provide it then
+neoclip/X11 will be loaded instead.
 
 								 *neoclip-luv*
 There are two new driver versions for *nix: `neoclip.wluv-driver` and

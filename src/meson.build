@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2024 Aug 23
+# Last Change:  2025 Jun 10
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -42,6 +42,15 @@ else # *nix
   wl_client = dependency('wayland-client', required : false)
   wl_scanner = find_program('wayland-scanner', required : false, native : true)
   if wl_scanner.found()
+    ext_data_control_xml = 'extra/ext-data-control-v1.xml'
+    ext_data_control = [
+      custom_target('ext-data-control-c', input : ext_data_control_xml,
+        output : 'wayland-ext-data-control-protocol.c',
+        command : [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@']),
+      custom_target('ext-data-control-h', input : ext_data_control_xml,
+        output : 'wayland-ext-data-control-client-protocol.h',
+        command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@']),
+    ]
     wlr_data_control_xml = 'extra/wlr-data-control-unstable-v1.xml'
     wlr_data_control = [
       custom_target('wlr-data-control-c', input : wlr_data_control_xml,
@@ -66,15 +75,16 @@ else # *nix
   endif
 
   # wl-driver
-  if wl_client.found() and is_variable('wlr_data_control') and threads.found()
-    wl_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c', wlr_data_control]
+  if wl_client.found() and wl_scanner.found() and threads.found()
+    wl_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c',
+      ext_data_control, wlr_data_control]
     wl_deps = [wl_client, threads]
   endif
 
   # wluv-driver
-  if wl_client.found() and is_variable('wlr_data_control')
+  if wl_client.found() and wl_scanner.found()
     wluv_sources = ['neoclip_nix.c', 'neo_wayland_uv.c', 'neo_common.c',
-      wlr_data_control]
+      ext_data_control, wlr_data_control]
     wluv_deps = [wl_client]
   endif
 endif

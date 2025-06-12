@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 23
+ * Last Change:  2025 Jun 12
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <sys/signalfd.h>
 #include <wayland-client.h>
+#include <wayland-ext-data-control-client-protocol.h>
 #include <wayland-wlr-data-control-client-protocol.h>
 
 
@@ -20,21 +21,21 @@
 static void registry_global(void* X, struct wl_registry* registry, uint32_t name,
     const char* interface, uint32_t version);
 static void data_control_device_data_offer(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer);
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
 static void data_control_device_primary_selection(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer);
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
 static void data_control_device_selection(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer);
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
 static void data_control_device_finished(void* X,
-    struct zwlr_data_control_device_v1* dcd);
-static void data_control_offer_offer(void* X, struct zwlr_data_control_offer_v1* offer,
+    struct ext_data_control_device_v1* dcd);
+static void data_control_offer_offer(void* X, struct ext_data_control_offer_v1* offer,
     const char* mime_type);
 static void data_control_source_send_prim(void* X,
-    struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd);
+    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd);
 static void data_control_source_send_clip(void* X,
-    struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd);
+    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd);
 static void data_control_source_cancelled(void* X,
-    struct zwlr_data_control_source_v1* dcs);
+    struct ext_data_control_source_v1* dcs);
 
 
 // simplify Wayland listeners declaration
@@ -64,23 +65,50 @@ static LISTEN {
     OBJECT(wl_registry, INDEX(registry)) {
         .global = registry_global,
     }},
-    OBJECT(zwlr_data_control_device_v1, INDEX(device)) {
+    OBJECT(ext_data_control_device_v1, INDEX(device)) {
         .data_offer = data_control_device_data_offer,
         .primary_selection = data_control_device_primary_selection,
         .selection = data_control_device_selection,
         .finished = data_control_device_finished,
     }},
-    OBJECT(zwlr_data_control_offer_v1, INDEX(offer)) {
+    OBJECT(ext_data_control_offer_v1, INDEX(offer)) {
         .offer = data_control_offer_offer,
     }},
-    OBJECT(zwlr_data_control_source_v1, INDEX(source_prim)) {
+    OBJECT(ext_data_control_source_v1, INDEX(source_prim)) {
         .send = data_control_source_send_prim,
         .cancelled = data_control_source_cancelled,
     }},
-    OBJECT(zwlr_data_control_source_v1, INDEX(source_clip)) {
+    OBJECT(ext_data_control_source_v1, INDEX(source_clip)) {
         .send = data_control_source_send_clip,
         .cancelled = data_control_source_cancelled,
     }},
+};
+
+
+// driver state
+struct neo_X {
+    struct wl_display* d;                       // Wayland display
+    struct wl_seat* seat;                       // Wayland seat
+    struct ext_data_control_manager_v1* dcm;    // ext data control manager
+    struct ext_data_control_device_v1* dcd;     // ext data control device
+    const struct wl_interface* dcd_iface;       // ext or zwlr
+    const struct wl_interface* dcs_iface;       // ext or zwlr
+    uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
+    size_t cb[sel_total];                       // Selection: text size only
+    pthread_mutex_t lock;                       // Mutex lock
+    pthread_t tid;                              // Thread ID
+};
+
+
+// supported mime types (from best to worst)
+static const char* mime[] = {
+    [0] = "_VIMENC_TEXT",
+    [1] = "_VIM_TEXT",
+    "text/plain;charset=utf-8",
+    "text/plain",
+    "UTF8_STRING",
+    "STRING",
+    "TEXT",
 };
 
 
@@ -101,29 +129,22 @@ static inline int listen_to(void* object, int i, void* data)
 }
 
 
-// driver state
-struct neo_X {
-    struct wl_display* d;                       // Wayland display
-    struct wl_seat* seat;                       // Wayland seat
-    struct zwlr_data_control_manager_v1* dcm;   // wlroots data control manager
-    struct zwlr_data_control_device_v1* dcd;    // wlroots data control device
-    uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
-    size_t cb[sel_total];                       // Selection: text size only
-    pthread_mutex_t lock;                       // Mutex lock
-    pthread_t tid;                              // Thread ID
-};
+static inline struct ext_data_control_device_v1*
+get_data_device(struct neo_X* x)
+{
+    return (struct ext_data_control_device_v1*)wl_proxy_marshal_constructor(
+        (struct wl_proxy*)x->dcm, EXT_DATA_CONTROL_MANAGER_V1_GET_DATA_DEVICE,
+        x->dcd_iface, NULL, x->seat);
+}
 
 
-// supported mime types (from best to worst)
-static const char* mime[] = {
-    [0] = "_VIMENC_TEXT",
-    [1] = "_VIM_TEXT",
-    "text/plain;charset=utf-8",
-    "text/plain",
-    "UTF8_STRING",
-    "STRING",
-    "TEXT",
-};
+static inline struct ext_data_control_source_v1*
+create_data_source(struct neo_X* x)
+{
+    return (struct ext_data_control_source_v1*)wl_proxy_marshal_constructor(
+        (struct wl_proxy*)x->dcm, EXT_DATA_CONTROL_MANAGER_V1_CREATE_DATA_SOURCE,
+        x->dcs_iface, NULL);
+}
 
 
 // forward prototypes
@@ -132,9 +153,9 @@ static bool neo_lock(neo_X* x);
 static bool neo_unlock(neo_X* x);
 static void* thread_main(void* X);
 static size_t alloc_data(neo_X* x, int sel, size_t cb);
-static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer);
+static void sel_read(neo_X* x, int sel, struct ext_data_control_offer_v1* offer);
 static void sel_write(neo_X* x, int sel, const char* mime_type, int fd);
-static void* offer_read(neo_X* x, struct zwlr_data_control_offer_v1* offer,
+static void* offer_read(neo_X* x, struct ext_data_control_offer_v1* offer,
     const char* mime, size_t* pcb);
 
 
@@ -163,12 +184,22 @@ int neo_start(lua_State* L)
         if (x->dcm == NULL) {
             wl_seat_release(x->seat);
             wl_display_disconnect(x->d);
-            lua_pushliteral(L, "no support for wlr-data-control protocol");
+            lua_pushliteral(L, "no support for ext-data-control protocol");
             return lua_error(L);
         }
 
+        // ext-data-control or zwlr-data-control?
+        if (strcmp(wl_proxy_get_class((struct wl_proxy*)x->dcm),
+            ext_data_control_manager_v1_interface.name) == 0) {
+            x->dcd_iface = &ext_data_control_device_v1_interface;
+            x->dcs_iface = &ext_data_control_source_v1_interface;
+        } else {
+            x->dcd_iface = &zwlr_data_control_device_v1_interface;
+            x->dcs_iface = &zwlr_data_control_source_v1_interface;
+        }
+
         // listen for new offers on our data device
-        x->dcd = zwlr_data_control_manager_v1_get_data_device(x->dcm, x->seat);
+        x->dcd = get_data_device(x);
         listen_to(x->dcd, INDEX(device), x);
 
         // clear data
@@ -207,8 +238,8 @@ static int neo__gc(lua_State* L)
     pthread_mutex_destroy(&x->lock);
     for (int i = 0; i < sel_total; ++i)
         free(x->data[i]);
-    zwlr_data_control_device_v1_destroy(x->dcd);
-    zwlr_data_control_manager_v1_destroy(x->dcm);
+    ext_data_control_device_v1_destroy(x->dcd);
+    ext_data_control_manager_v1_destroy(x->dcm);
     wl_seat_release(x->seat);
     wl_display_disconnect(x->d);
 
@@ -221,7 +252,7 @@ void neo_fetch(lua_State* L, int ix, int sel)
 {
     neo_X* x = neo_x(L);
     if (x != NULL && neo_lock(x)) {
-        // wlr_data_control_device should've informed us of a new selection
+        // ext_data_control_device should've informed us of a new selection
         if (x->cb[sel] > 0)
             neo_split(L, ix, x->data[sel] + 1 + sizeof("utf-8"), x->cb[sel],
                 x->data[sel][0]);
@@ -247,18 +278,17 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 
         if (offer) {
             // offer our selection
-            struct zwlr_data_control_source_v1* dcs =
-                zwlr_data_control_manager_v1_create_data_source(x->dcm);
+            struct ext_data_control_source_v1* dcs = create_data_source(x);
             for (int i = 0; i < COUNTOF(mime); ++i)
-                zwlr_data_control_source_v1_offer(dcs, mime[i]);
+                ext_data_control_source_v1_offer(dcs, mime[i]);
             switch (sel) {
             case sel_prim:
                 listen_to(dcs, INDEX(source_prim), x);
-                zwlr_data_control_device_v1_set_primary_selection(x->dcd, dcs);
+                ext_data_control_device_v1_set_primary_selection(x->dcd, dcs);
             break;
             case sel_clip:
                 listen_to(dcs, INDEX(source_clip), x);
-                zwlr_data_control_device_v1_set_selection(x->dcd, dcs);
+                ext_data_control_device_v1_set_selection(x->dcd, dcs);
             break;
             }
             wl_display_flush(x->d);
@@ -339,6 +369,7 @@ static void registry_global(void* X, struct wl_registry* registry, uint32_t name
         const struct wl_interface* iface;
     } globl[] = {
         { (void**)&x->seat, &wl_seat_interface, },
+        { (void**)&x->dcm, &ext_data_control_manager_v1_interface, },
         { (void**)&x->dcm, &zwlr_data_control_manager_v1_interface, },
     };
 
@@ -353,9 +384,9 @@ static void registry_global(void* X, struct wl_registry* registry, uint32_t name
 }
 
 
-// [z]wlr_data_control_device_[v1]::data_offer
+// ext_data_control_device_v1::data_offer
 static void data_control_device_data_offer(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer)
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer)
 {
     (void)X;    // unused
     (void)dcd;  // unused
@@ -364,79 +395,79 @@ static void data_control_device_data_offer(void* X,
 }
 
 
-// [z]wlr_data_control_device_[v1]::primary_selection
+// ext_data_control_device_v1::primary_selection
 static void data_control_device_primary_selection(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer)
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer)
 {
     (void)dcd;  // unused
     sel_read((neo_X*)X, sel_prim, offer);
 }
 
 
-// [z]wlr_data_control_device_[v1]::selection
+// ext_data_control_device_v1::selection
 static void data_control_device_selection(void* X,
-    struct zwlr_data_control_device_v1* dcd, struct zwlr_data_control_offer_v1* offer)
+    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer)
 {
     (void)dcd;  // unused
     sel_read((neo_X*)X, sel_clip, offer);
 }
 
 
-// [z]wlr_data_control_device_[v1]::finished
+// ext_data_control_device_v1::finished
 static void data_control_device_finished(void* X,
-    struct zwlr_data_control_device_v1* dcd)
+    struct ext_data_control_device_v1* dcd)
 {
     neo_X* x = (neo_X*)X;
 
     if (x->dcd == dcd) {
-        x->dcd = zwlr_data_control_manager_v1_get_data_device(x->dcm, x->seat);
+        x->dcd = get_data_device(x);
         listen_to(x->dcd, INDEX(device), x);
     }
-    zwlr_data_control_device_v1_destroy(dcd);
+    ext_data_control_device_v1_destroy(dcd);
 }
 
 
-// [z]wlr_data_control_offer_[v1]::offer
-static void data_control_offer_offer(void* X, struct zwlr_data_control_offer_v1* offer,
+// ext_data_control_offer_v1::offer
+static void data_control_offer_offer(void* X, struct ext_data_control_offer_v1* offer,
     const char* mime_type)
 {
     (void)X;    // unused
 
-    int best = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
-    for (int i = 0; i < best; ++i) {
+    int best_mime = (intptr_t)ext_data_control_offer_v1_get_user_data(offer);
+    for (int i = 0; i < best_mime; ++i) {
         if (strcmp(mime_type, mime[i]) == 0) {
-            best = i;
+            best_mime = i;
             break;
         }
     }
-    wl_proxy_set_user_data((struct wl_proxy*)offer, (void*)(intptr_t)best);
+    ext_data_control_offer_v1_set_user_data(offer, (void*)(intptr_t)best_mime);
 }
 
 
-// [z]wlr_data_control_source_[v1]::send
+// ext_data_control_source_v1::send
 static void data_control_source_send_prim(void* X,
-    struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd)
+    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd)
 {
     (void)dcs;   // unused
     sel_write((neo_X*)X, sel_prim, mime_type, fd);
 }
 
 
-// [z]wlr_data_control_source_[v1]::send
+// ext_data_control_source_v1::send
 static void data_control_source_send_clip(void* X,
-    struct zwlr_data_control_source_v1* dcs, const char* mime_type, int fd)
+    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd)
 {
     (void)dcs;   // unused
     sel_write((neo_X*)X, sel_clip, mime_type, fd);
 }
 
 
-// [z]wlr_data_control_source_[v1]::cancelled
+// ext_data_control_source_v1::cancelled
 static void data_control_source_cancelled(void* X,
-    struct zwlr_data_control_source_v1* dcs)
+    struct ext_data_control_source_v1* dcs)
 {
     (void)X;    // unused
-    zwlr_data_control_source_v1_destroy(dcs);
+    ext_data_control_source_v1_destroy(dcs);
 }
 
 
@@ -461,14 +492,14 @@ static size_t alloc_data(neo_X* x, int sel, size_t cb)
 
 
 // read selection data from offer
-static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer)
+static void sel_read(neo_X* x, int sel, struct ext_data_control_offer_v1* offer)
 {
     if (offer == NULL) {
         neo_own(x, false, sel, NULL, 0, 0);
         return;
     }
 
-    int best_mime = (intptr_t)wl_proxy_get_user_data((struct wl_proxy*)offer);
+    int best_mime = (intptr_t)ext_data_control_offer_v1_get_user_data(offer);
     if (best_mime >= 0 && best_mime < COUNTOF(mime)) {
         size_t cb;
         uint8_t* ptr = offer_read(x, offer, mime[best_mime], &cb);
@@ -499,7 +530,7 @@ static void sel_read(neo_X* x, int sel, struct zwlr_data_control_offer_v1* offer
         free(ptr);
     }
 
-    zwlr_data_control_offer_v1_destroy(offer);
+    ext_data_control_offer_v1_destroy(offer);
 }
 
 
@@ -534,7 +565,7 @@ static void sel_write(neo_X* x, int sel, const char* mime_type, int fd)
 
 
 // read specific mime type from offer
-static void* offer_read(neo_X* x, struct zwlr_data_control_offer_v1* offer,
+static void* offer_read(neo_X* x, struct ext_data_control_offer_v1* offer,
     const char* mime, size_t* pcb)
 {
     uint8_t* ptr = NULL;
@@ -542,7 +573,7 @@ static void* offer_read(neo_X* x, struct zwlr_data_control_offer_v1* offer,
     int fds[2];
 
     if (pipe(fds) == 0) {
-        zwlr_data_control_offer_v1_receive(offer, mime, fds[1]);
+        ext_data_control_offer_v1_receive(offer, mime, fds[1]);
         wl_display_roundtrip(x->d);
         close(fds[1]);
 

@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2024 Aug 21
+    Last Change:    2025 Jun 10
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -81,6 +81,8 @@ elseif(UNIX)
         find_package(WaylandScanner)
     endif()
     if(WaylandScanner_FOUND)
+        ecm_add_wayland_client_protocol(ext_data_control BASENAME "ext-data-control"
+            PROTOCOL "extra/ext-data-control-v1.xml")
         ecm_add_wayland_client_protocol(wlr_data_control BASENAME "wlr-data-control"
             PROTOCOL "extra/wlr-data-control-unstable-v1.xml")
     endif()
@@ -98,17 +100,17 @@ elseif(UNIX)
     endif()
 
     # wl-driver
-    if(Wayland_FOUND AND wlr_data_control AND Threads_FOUND)
+    if(Wayland_FOUND AND WaylandScanner_FOUND AND Threads_FOUND)
         set(wl_sources "neoclip_nix.c" "neo_wayland.c" "neo_common.c"
-            "${wlr_data_control}")
+            "${ext_data_control}" "${wlr_data_control}")
         set(wl_libraries "${Wayland_LIBRARIES}" Threads::Threads)
         set(wl_include_dirs "${CMAKE_CURRENT_BINARY_DIR}")
     endif()
 
     # wluv-driver
-    if(Wayland_FOUND AND wlr_data_control)
+    if(Wayland_FOUND AND WaylandScanner_FOUND)
         set(wluv_sources "neoclip_nix.c" "neo_wayland_uv.c" "neo_common.c"
-            "${wlr_data_control}")
+            "${ext_data_control}" "${wlr_data_control}")
         set(wluv_libraries "${Wayland_LIBRARIES}")
         set(wluv_include_dirs "${CMAKE_CURRENT_BINARY_DIR}")
     endif()
