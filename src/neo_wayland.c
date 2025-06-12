@@ -129,21 +129,17 @@ static inline int listen_to(void* object, int i, void* data)
 }
 
 
-static inline struct ext_data_control_device_v1*
-get_data_device(struct neo_X* x)
+static inline void* get_data_device(struct neo_X* x)
 {
-    return (struct ext_data_control_device_v1*)wl_proxy_marshal_constructor(
-        (struct wl_proxy*)x->dcm, EXT_DATA_CONTROL_MANAGER_V1_GET_DATA_DEVICE,
-        x->dcd_iface, NULL, x->seat);
+    return wl_proxy_marshal_constructor((struct wl_proxy*)x->dcm,
+        EXT_DATA_CONTROL_MANAGER_V1_GET_DATA_DEVICE, x->dcd_iface, NULL, x->seat);
 }
 
 
-static inline struct ext_data_control_source_v1*
-create_data_source(struct neo_X* x)
+static inline void* create_data_source(struct neo_X* x)
 {
-    return (struct ext_data_control_source_v1*)wl_proxy_marshal_constructor(
-        (struct wl_proxy*)x->dcm, EXT_DATA_CONTROL_MANAGER_V1_CREATE_DATA_SOURCE,
-        x->dcs_iface, NULL);
+    return wl_proxy_marshal_constructor((struct wl_proxy*)x->dcm,
+        EXT_DATA_CONTROL_MANAGER_V1_CREATE_DATA_SOURCE, x->dcs_iface, NULL);
 }
 
 
