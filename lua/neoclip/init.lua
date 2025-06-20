@@ -1,6 +1,6 @@
 --[[
     neoclip - Neovim clipboard provider
-    Last Change:    2025 Mar 26
+    Last Change:    2025 Jun 19
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 --]]
@@ -116,8 +116,8 @@ function neoclip.setup(arg1, arg2)
         local _ = vim.env.WAYLAND_DISPLAY
             and (neoclip.require"neoclip.wl-driver"
                 or neoclip.require"neoclip.wluv-driver")
-            or (neoclip.require"neoclip.x11-driver"
-                or neoclip.require"neoclip.x11uv-driver")
+            or (neoclip.require"neoclip.x11uv-driver"
+                or neoclip.require"neoclip.x11-driver")
     else
         neoclip.issue"Unsupported platform"
     end

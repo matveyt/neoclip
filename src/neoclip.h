@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 23
+ * Last Change:  2025 Jun 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -18,6 +18,10 @@
 
 #include <lua.h>
 #include <lauxlib.h>
+
+#ifndef _countof
+#define _countof(o) (sizeof(o) / sizeof(o[0]))
+#endif // _countof
 
 
 // Vim register type

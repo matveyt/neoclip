@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 21
+ * Last Change:  2025 Jun 19
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,6 +12,12 @@
 #if !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200112L
 #endif // _POSIX_C_SOURCE
+
+#if !defined(WITH_THREADS) && !defined(WITH_LUV)
+#define WITH_LUV
+#elif defined(WITH_THREADS) && defined(WITH_LUV)
+#undef WITH_THREADS
+#endif // WITH_LUV
 
 #include "neoclip.h"
 

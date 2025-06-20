@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2025 Jun 10
+    Last Change:    2025 Jun 19
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -51,6 +51,9 @@ function(neo_module name)
     cmake_parse_arguments(NEO "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
     add_library(${name} MODULE ${NEO_SOURCES})
     target_link_libraries(${name} ${LUA_LIBRARIES} ${NEO_LIBRARIES})
+    if(Threads::Threads IN_LIST NEO_LIBRARIES)
+        target_compile_definitions(${name} PRIVATE "WITH_THREADS")
+    endif()
     target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS})
     target_include_directories(${name} PRIVATE ${LUA_INCLUDE_DIRS} ${NEO_INCLUDE_DIRS})
     install(TARGETS ${name} DESTINATION "lua/neoclip" PERMISSIONS OWNER_READ OWNER_WRITE)
@@ -95,7 +98,7 @@ elseif(UNIX)
 
     # x11uv-driver
     if(X11_LIBRARIES)
-        set(x11uv_sources "neoclip_nix.c" "neo_x11_uv.c" "neo_common.c")
+        set(x11uv_sources "neoclip_nix.c" "neo_x11.c" "neo_common.c")
         set(x11uv_libraries "${X11_LIBRARIES}")
     endif()
 
@@ -109,7 +112,7 @@ elseif(UNIX)
 
     # wluv-driver
     if(Wayland_FOUND AND WaylandScanner_FOUND)
-        set(wluv_sources "neoclip_nix.c" "neo_wayland_uv.c" "neo_common.c"
+        set(wluv_sources "neoclip_nix.c" "neo_wayland.c" "neo_common.c"
             "${ext_data_control}" "${wlr_data_control}")
         set(wluv_libraries "${Wayland_LIBRARIES}")
         set(wluv_include_dirs "${CMAKE_CURRENT_BINARY_DIR}")

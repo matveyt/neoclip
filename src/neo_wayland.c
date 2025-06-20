@@ -1,66 +1,27 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 12
+ * Last Change:  2025 Jun 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#include "neoclip_nix.h"
-#include <poll.h>
-#include <pthread.h>
-#include <signal.h>
-#include <unistd.h>
-#include <sys/signalfd.h>
-#include <wayland-client.h>
-#include <wayland-ext-data-control-client-protocol.h>
-#include <wayland-wlr-data-control-client-protocol.h>
+#include "neo_wayland.h"
 
 
-// our listeners
-static void registry_global(void* X, struct wl_registry* registry, uint32_t name,
-    const char* interface, uint32_t version);
-static void data_control_device_data_offer(void* X,
-    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
-static void data_control_device_primary_selection(void* X,
-    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
-static void data_control_device_selection(void* X,
-    struct ext_data_control_device_v1* dcd, struct ext_data_control_offer_v1* offer);
-static void data_control_device_finished(void* X,
-    struct ext_data_control_device_v1* dcd);
-static void data_control_offer_offer(void* X, struct ext_data_control_offer_v1* offer,
-    const char* mime_type);
-static void data_control_source_send_prim(void* X,
-    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd);
-static void data_control_source_send_clip(void* X,
-    struct ext_data_control_source_v1* dcs, const char* mime_type, int fd);
-static void data_control_source_cancelled(void* X,
-    struct ext_data_control_source_v1* dcs);
-
-
-// simplify Wayland listeners declaration
-#define COUNTOF(o) (int)(sizeof(o) / sizeof(o[0]))
-#define INDEX(ix) INDEX_##ix
-#define LISTEN              \
-    struct {                \
-        const int count;    \
-        void* pimpl;        \
-    } _listen[] =
-#define OBJECT(o, ix) [ix] = {                                      \
-    .count = sizeof(struct o##_listener) / sizeof(LISTENER_FUNC),   \
-    .pimpl = &(struct o##_listener)
-
-
-enum {
-    INDEX(registry),
-    INDEX(device),
-    INDEX(offer),
-    INDEX(source_prim),
-    INDEX(source_clip),
+// supported mime types (from best to worst)
+static const char* mime[] = {
+    [0] = "_VIMENC_TEXT",
+    [1] = "_VIM_TEXT",
+    "text/plain;charset=utf-8",
+    "text/plain",
+    "UTF8_STRING",
+    "STRING",
+    "TEXT",
 };
-typedef void (*LISTENER_FUNC)(void);
 
 
+// Wayland listeners
 static LISTEN {
     OBJECT(wl_registry, INDEX(registry)) {
         .global = registry_global,
@@ -85,74 +46,19 @@ static LISTEN {
 };
 
 
-// driver state
-struct neo_X {
-    struct wl_display* d;                       // Wayland display
-    struct wl_seat* seat;                       // Wayland seat
-    struct ext_data_control_manager_v1* dcm;    // ext data control manager
-    struct ext_data_control_device_v1* dcd;     // ext data control device
-    const struct wl_interface* dcd_iface;       // ext or zwlr
-    const struct wl_interface* dcs_iface;       // ext or zwlr
-    uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
-    size_t cb[sel_total];                       // Selection: text size only
-    pthread_mutex_t lock;                       // Mutex lock
-    pthread_t tid;                              // Thread ID
-};
-
-
-// supported mime types (from best to worst)
-static const char* mime[] = {
-    [0] = "_VIMENC_TEXT",
-    [1] = "_VIM_TEXT",
-    "text/plain;charset=utf-8",
-    "text/plain",
-    "UTF8_STRING",
-    "STRING",
-    "TEXT",
-};
-
-
 // As Wayland segfaults on NULL listener we must provide stubs. Dirt!
 static void _nop(void) {}
 static inline void listen_init(void)
 {
-    for (int i = 0; i < COUNTOF(_listen); ++i)
-        for (int j = 0; j < _listen[i].count; ++j)
-            if (((LISTENER_FUNC*)_listen[i].pimpl)[j] == NULL)
-                ((LISTENER_FUNC*)_listen[i].pimpl)[j] = _nop;
+    for (size_t i = 0; i < _countof(_listen); ++i)
+        for (size_t j = 0; j < _listen[i].count; ++j)
+            if (((WAYLAND_LISTENER*)_listen[i].pimpl)[j] == NULL)
+                ((WAYLAND_LISTENER*)_listen[i].pimpl)[j] = _nop;
 }
-
-
 static inline int listen_to(void* object, int i, void* data)
 {
     return wl_proxy_add_listener(object, _listen[i].pimpl, data);
 }
-
-
-static inline void* get_data_device(struct neo_X* x)
-{
-    return wl_proxy_marshal_constructor((struct wl_proxy*)x->dcm,
-        EXT_DATA_CONTROL_MANAGER_V1_GET_DATA_DEVICE, x->dcd_iface, NULL, x->seat);
-}
-
-
-static inline void* create_data_source(struct neo_X* x)
-{
-    return wl_proxy_marshal_constructor((struct wl_proxy*)x->dcm,
-        EXT_DATA_CONTROL_MANAGER_V1_CREATE_DATA_SOURCE, x->dcs_iface, NULL);
-}
-
-
-// forward prototypes
-static int neo__gc(lua_State* L);
-static bool neo_lock(neo_X* x);
-static bool neo_unlock(neo_X* x);
-static void* thread_main(void* X);
-static size_t alloc_data(neo_X* x, int sel, size_t cb);
-static void sel_read(neo_X* x, int sel, struct ext_data_control_offer_v1* offer);
-static void sel_write(neo_X* x, int sel, const char* mime_type, int fd);
-static void* offer_read(neo_X* x, struct ext_data_control_offer_v1* offer,
-    const char* mime, size_t* pcb);
 
 
 // init state and start thread
@@ -199,7 +105,7 @@ int neo_start(lua_State* L)
         listen_to(x->dcd, INDEX(device), x);
 
         // clear data
-        for (int i = 0; i < sel_total; ++i) {
+        for (size_t i = 0; i < sel_total; ++i) {
             x->data[i] = NULL;
             x->cb[i] = 0;
         }
@@ -213,9 +119,49 @@ int neo_start(lua_State* L)
         // uv_share.x = x
         lua_setfield(L, uv_share, "x");
 
+#ifdef WITH_LUV
+        // start polling display
+        lua_getglobal(L, "vim");                // vim.uv or vim.loop => stack
+        lua_getfield(L, -1, "uv");
+        if (lua_isnil(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "loop");
+        }
+        lua_replace(L, -2);
+
+        // local prepare = uv.new_prepare()
+        lua_getfield(L, -1, "new_prepare");
+        lua_call(L, 0, 1);                      // prepare => stack
+        // uv.prepare_start(prepare, cb_prepare)
+        lua_getfield(L, -2, "prepare_start");
+        lua_pushvalue(L, -2);
+        neo_pushcfunction(L, cb_prepare);
+        lua_call(L, 2, 0);
+
+        // local poll = uv.new_poll(wl_display_get_fd(x->d))
+        lua_getfield(L, -2, "new_poll");
+        lua_pushinteger(L, wl_display_get_fd(x->d));
+        lua_call(L, 1, 1);                      // poll => stack
+        // uv.poll_start(poll, "rw", cb_poll)
+        lua_getfield(L, -3, "poll_start");
+        lua_pushvalue(L, -2);
+        lua_pushliteral(L, "rw");
+        neo_pushcfunction(L, cb_poll);
+        lua_call(L, 3, 0);
+
+        // uv_share.poll = poll
+        lua_setfield(L, uv_share, "poll");      // poll <= stack
+        // uv_share.prepare = prepare
+        lua_setfield(L, uv_share, "prepare");   // prepare <= stack
+        // uv_share.uv = vim.uv or vim.loop
+        lua_setfield(L, uv_share, "uv");        // vim.uv or vim.loop <= stack
+#endif // WITH_LUV
+
+#ifdef WITH_THREADS
         // start thread
         pthread_mutex_init(&x->lock, NULL);
         pthread_create(&x->tid, NULL, thread_main, x);
+#endif // WITH_THREADS
     }
 
     lua_pushnil(L);
@@ -228,11 +174,49 @@ static int neo__gc(lua_State* L)
 {
     neo_X* x = (neo_X*)neo_checkud(L, 1);
 
-    // clear data
+#ifdef WITH_LUV
+    lua_getfield(L, uv_share, "uv");    // uv or loop => stack
+    // uv.poll_stop(uv_share.poll)
+    lua_getfield(L, -1, "poll_stop");
+    lua_getfield(L, uv_share, "poll");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // uv.close(poll)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "poll");
+        lua_call(L, 1, 0);
+        // uv_share.poll = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "poll");
+    }
+
+    // uv.prepare_stop(prepare)
+    lua_getfield(L, -1, "prepare_stop");
+    lua_getfield(L, uv_share, "prepare");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // uv.close(prepare)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "prepare");
+        lua_call(L, 1, 0);
+        // uv_share.prepare = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "prepare");
+    }
+#endif // WITH_LUV
+
+#ifdef WITH_THREADS
     pthread_kill(x->tid, SIGTERM);
     pthread_join(x->tid, NULL);
     pthread_mutex_destroy(&x->lock);
-    for (int i = 0; i < sel_total; ++i)
+#endif // WITH_THREADS
+
+    // clear data
+    for (size_t i = 0; i < sel_total; ++i)
         free(x->data[i]);
     ext_data_control_device_v1_destroy(x->dcd);
     ext_data_control_manager_v1_destroy(x->dcm);
@@ -275,7 +259,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
         if (offer) {
             // offer our selection
             struct ext_data_control_source_v1* dcs = create_data_source(x);
-            for (int i = 0; i < COUNTOF(mime); ++i)
+            for (size_t i = 0; i < _countof(mime); ++i)
                 ext_data_control_source_v1_offer(dcs, mime[i]);
             switch (sel) {
             case sel_prim:
@@ -288,8 +272,10 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
             break;
             }
             wl_display_flush(x->d);
+#ifdef WITH_LUV
             // dispatch in the polling thread only!
-            //wl_display_roundtrip(x->d);
+            wl_display_roundtrip(x->d);
+#endif // WITH_LUV
         }
 
         neo_unlock(x);
@@ -297,20 +283,34 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 }
 
 
-// lock selection data
-static inline bool neo_lock(neo_X* x)
+#ifdef WITH_LUV
+// uv_prepare_t callback
+static int cb_prepare(lua_State* L)
 {
-    return (pthread_mutex_lock(&x->lock) == 0);
+    neo_X* x = neo_x(L);
+    if (x != NULL)
+        prepare_event(x->d);
+
+    return 0;
 }
+#endif // WITH_LUV
 
 
-// unlock selection data
-static inline bool neo_unlock(neo_X* x)
+#ifdef WITH_LUV
+// uv_poll_t callback
+static int cb_poll(lua_State* L)
 {
-    return (pthread_mutex_unlock(&x->lock) == 0);
+    neo_X* x = neo_x(L);
+    if (x != NULL)
+        dispatch_event(x->d,
+            lua_isnil(L, 1) && strchr(lua_tostring(L, 2), 'r') != NULL);
+
+    return 0;
 }
+#endif // WITH_LUV
 
 
+#ifdef WITH_THREADS
 // thread entry point
 static void* thread_main(void* X)
 {
@@ -327,12 +327,10 @@ static void* thread_main(void* X)
         { .fd = wl_display_get_fd(x->d), .events = POLLIN, },
     };
 
-    for (;;) {
-        while (wl_display_prepare_read(x->d) != 0)
-            wl_display_dispatch_pending(x->d);
-        wl_display_flush(x->d);
+    do {
+        prepare_event(x->d);
 
-        if (poll(fds, COUNTOF(fds), -1) < 0)
+        if (poll(fds, _countof(fds), -1) < 0)
             break;
 
         if (fds[0].revents & POLLIN) {
@@ -341,18 +339,13 @@ static void* thread_main(void* X)
             if (cb != sizeof(ssi) || ssi.ssi_signo == SIGINT || ssi.ssi_signo == SIGTERM)
                 break;
         }
-
-        if (fds[1].revents & POLLIN)
-            wl_display_read_events(x->d);
-        else
-            wl_display_cancel_read(x->d);
-        wl_display_dispatch_pending(x->d);
-    }
+    } while (dispatch_event(x->d, fds[1].revents & POLLIN) >= 0);
 
     close(fds[0].fd);
     wl_display_cancel_read(x->d);
     return NULL;
 }
+#endif // WITH_THREADS
 
 
 // wl_registry::global
@@ -369,7 +362,7 @@ static void registry_global(void* X, struct wl_registry* registry, uint32_t name
         { (void**)&x->dcm, &zwlr_data_control_manager_v1_interface, },
     };
 
-    for (int i = 0; i < COUNTOF(globl); ++i) {
+    for (size_t i = 0; i < _countof(globl); ++i) {
         if (strcmp(interface, globl[i].iface->name) == 0) {
             if (*globl[i].pobject == NULL)
                 *globl[i].pobject = wl_registry_bind(registry, name, globl[i].iface,
@@ -387,7 +380,7 @@ static void data_control_device_data_offer(void* X,
     (void)X;    // unused
     (void)dcd;  // unused
 
-    listen_to(offer, INDEX(offer), (void*)(intptr_t)COUNTOF(mime));
+    listen_to(offer, INDEX(offer), (void*)(uintptr_t)_countof(mime));
 }
 
 
@@ -429,14 +422,14 @@ static void data_control_offer_offer(void* X, struct ext_data_control_offer_v1* 
 {
     (void)X;    // unused
 
-    int best_mime = (intptr_t)ext_data_control_offer_v1_get_user_data(offer);
-    for (int i = 0; i < best_mime; ++i) {
+    size_t best_mime = (uintptr_t)ext_data_control_offer_v1_get_user_data(offer);
+    for (size_t i = 0; i < best_mime; ++i) {
         if (strcmp(mime_type, mime[i]) == 0) {
             best_mime = i;
             break;
         }
     }
-    ext_data_control_offer_v1_set_user_data(offer, (void*)(intptr_t)best_mime);
+    ext_data_control_offer_v1_set_user_data(offer, (void*)(uintptr_t)best_mime);
 }
 
 
@@ -487,6 +480,26 @@ static size_t alloc_data(neo_X* x, int sel, size_t cb)
 }
 
 
+// read or cancel wl_display event
+static int dispatch_event(struct wl_display* d, bool valid)
+{
+    if (valid)
+        wl_display_read_events(d);
+    else
+        wl_display_cancel_read(d);
+    return wl_display_dispatch_pending(d);
+}
+
+
+// prepare to read wl_display event
+static int prepare_event(struct wl_display* d)
+{
+    while (wl_display_prepare_read(d) != 0)
+        wl_display_dispatch_pending(d);
+    return wl_display_flush(d);
+}
+
+
 // read selection data from offer
 static void sel_read(neo_X* x, int sel, struct ext_data_control_offer_v1* offer)
 {
@@ -495,8 +508,8 @@ static void sel_read(neo_X* x, int sel, struct ext_data_control_offer_v1* offer)
         return;
     }
 
-    int best_mime = (intptr_t)ext_data_control_offer_v1_get_user_data(offer);
-    if (best_mime >= 0 && best_mime < COUNTOF(mime)) {
+    size_t best_mime = (uintptr_t)ext_data_control_offer_v1_get_user_data(offer);
+    if (best_mime < _countof(mime)) {
         size_t cb;
         uint8_t* ptr = offer_read(x, offer, mime[best_mime], &cb);
         int type = (cb > 0 && best_mime <= 1) ? ptr[0] : MAUTO;

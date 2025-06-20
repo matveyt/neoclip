@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2025 Jun 10
+# Last Change:  2025 Jun 19
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -70,7 +70,7 @@ else # *nix
 
   # x11uv-driver
   if x11.found()
-    x11uv_sources = ['neoclip_nix.c', 'neo_x11_uv.c', 'neo_common.c']
+    x11uv_sources = ['neoclip_nix.c', 'neo_x11.c', 'neo_common.c']
     x11uv_deps = [x11]
   endif
 
@@ -83,7 +83,7 @@ else # *nix
 
   # wluv-driver
   if wl_client.found() and wl_scanner.found()
-    wluv_sources = ['neoclip_nix.c', 'neo_wayland_uv.c', 'neo_common.c',
+    wluv_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c',
       ext_data_control, wlr_data_control]
     wluv_deps = [wl_client]
   endif
@@ -93,10 +93,12 @@ foreach t : ['w32', 'mac', 'x11', 'x11uv', 'wl', 'wluv']
   name = t + '-driver'
   sources = get_variable(t + '_sources', [])
   deps = get_variable(t + '_deps', []) + [lua]
+  defines = is_variable('threads') and deps.contains(threads) ? '-DWITH_THREADS' : []
+  suffix = host_machine.system() == 'darwin' ? 'so' : []
   if get_variable(t + '_target', false) and sources != []
     message('Building `@0@\''.format(name))
-    shared_module(name, sources, dependencies : deps,
+    shared_module(name, sources, c_args : defines, dependencies : deps,
       gnu_symbol_visibility : 'internal', install : true, install_dir : 'lua/neoclip',
-      name_prefix : '', name_suffix : host_machine.system() == 'darwin' ? 'so' : [])
+      name_prefix : '', name_suffix : suffix)
   endif
 endforeach

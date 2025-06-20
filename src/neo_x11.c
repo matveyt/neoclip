@@ -1,87 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 23
+ * Last Change:  2025 Jun 20
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#include "neoclip_nix.h"
-#include <limits.h>
-#include <pthread.h>
-#include <time.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-
-
-// X11 atoms
-enum {
-    // sel_prim,        // PRIMARY
-    // sel_sec,         // SECONDARY
-    // sel_clip,        // CLIPBOARD
-    atom = sel_total,   // ATOM
-    atom_pair,          // ATOM_PAIR
-    clipman,            // CLIPBOARD_MANAGER
-    incr,               // INCR
-    integer,            // INTEGER
-    null,               // NULL
-    wm_proto,           // WM_PROTOCOLS
-    wm_dele,            // WM_DELETE_WINDOW
-    neo_ready,          // NEO_READY
-    neo_offer,          // NEO_OFFER
-    // supported targets
-    targets,            // TARGETS
-    dele,               // DELETE
-    multi,              // MULTIPLE
-    save,               // SAVE_TARGETS
-    timestamp,          // TIMESTAMP
-    // encodings from best to worst
-    vimenc,             // _VIMENC_TEXT
-    vimtext,            // _VIM_TEXT
-    plain_utf8,         // text/plain;charset=utf-8
-    utf8_string,        // UTF8_STRING
-    plain,              // text/plain
-    compound,           // COMPOUND_TEXT
-    string,             // STRING
-    text,               // TEXT
-    // total count
-    total
-};
-
-
-// driver state
-struct neo_X {
-    Display* d;                         // X Display
-    Window w;                           // X Window
-    Time delta;                         // X server startup time (ms from Unix epoch)
-    Atom atom[total];                   // X Atoms list
-    uint8_t* data[sel_total];           // Selection: _VIMENC_TEXT
-    size_t cb[sel_total];               // Selection: text size only
-    Time stamp[sel_total];              // Selection: time stamp
-    pthread_cond_t c_rdy[sel_total];    // Selection: "ready" condition
-    bool f_rdy[sel_total];              // Selection: "ready" flag
-    pthread_mutex_t lock;               // Mutex lock
-    pthread_t tid;                      // Thread ID
-};
-
-
-// forward prototypes
-static int neo__gc(lua_State* L);
-static bool neo_lock(neo_X* x);
-static bool neo_unlock(neo_X* x);
-static bool neo_signal(neo_X* x, int sel);
-static void* thread_main(void* X);
-static bool on_sel_notify(neo_X* x, XSelectionEvent* xse);
-static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre);
-static bool on_client_message(neo_X* X, XClientMessageEvent* xcme);
-static size_t alloc_data(neo_X* x, int sel, size_t cb);
-static int atom2sel(neo_X* x, Atom atom);
-static Atom best_target(neo_X* x, Atom* atom, int count);
-static void client_message(neo_X* x, int message, int param);
-static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg);
-static Time time_diff(Time ref);
-static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse);
-static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type);
+#include "neo_x11.h"
 
 
 // init state and start thread
@@ -89,6 +14,7 @@ int neo_start(lua_State* L)
 {
     neo_X* x = neo_x(L);
     if (x == NULL) {
+#ifdef WITH_THREADS
         // initialize X threads (required for xcb)
         if (!neo_did(L, "XInitThreads")) {
             if (XInitThreads() == False) {
@@ -96,6 +22,7 @@ int neo_start(lua_State* L)
                 return lua_error(L);
             }
         }
+#endif // WITH_THREADS
 
         // create new state
         x = lua_newuserdata(L, sizeof(neo_X));
@@ -141,13 +68,17 @@ int neo_start(lua_State* L)
         x->w = XCreateSimpleWindow(x->d, XDefaultRootWindow(x->d), 0, 0, 1, 1, 0, 0, 0);
         x->delta = CurrentTime;
         XInternAtoms(x->d, atom_name, total, False, x->atom);
+#ifdef WITH_THREADS
         XSetWMProtocols(x->d, x->w, &x->atom[wm_dele], 1);
-        for (int i = 0; i < sel_total; ++i) {
+#endif // WITH_THREADS
+        for (size_t i = 0; i < sel_total; ++i) {
             x->data[i] = NULL;
             x->cb[i] = 0;
             x->stamp[i] = CurrentTime;
-            pthread_cond_init(&x->c_rdy[i], NULL);
             x->f_rdy[i] = false;
+#ifdef WITH_THREADS
+            pthread_cond_init(&x->c_rdy[i], NULL);
+#endif // WITH_THREADS
         }
 
         // metatable for state
@@ -159,9 +90,52 @@ int neo_start(lua_State* L)
         // uv_share.x = x
         lua_setfield(L, uv_share, "x");
 
+#ifdef WITH_LUV
+        // start polling the display
+        lua_getglobal(L, "vim");                // vim.uv or vim.loop => stack
+        lua_getfield(L, -1, "uv");
+        if (lua_isnil(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "loop");
+        }
+        lua_replace(L, -2);
+
+        // local prepare = uv.new_prepare()
+        lua_getfield(L, -1, "new_prepare");
+        lua_call(L, 0, 1);                      // prepare => stack
+        // uv.prepare_start(prepare, cb_prepare)
+        lua_getfield(L, -2, "prepare_start");
+        lua_pushvalue(L, -2);
+        neo_pushcfunction(L, cb_prepare);
+        lua_call(L, 2, 0);
+
+        // local poll = uv.new_poll(XConnectionNumber(x->d))
+        lua_getfield(L, -2, "new_poll");
+        lua_pushinteger(L, XConnectionNumber(x->d));
+        lua_call(L, 1, 1);                      // poll => stack
+        // uv.poll_start(poll, "r", cb_poll)
+        lua_getfield(L, -3, "poll_start");
+        lua_pushvalue(L, -2);
+        lua_pushliteral(L, "r");
+        neo_pushcfunction(L, cb_poll);
+        lua_call(L, 3, 0);
+
+        // uv_share.poll = poll
+        lua_setfield(L, uv_share, "poll");      // poll <= stack
+        // uv_share.prepare = prepare
+        lua_setfield(L, uv_share, "prepare");   // prepare <= stack
+        // uv_share.uv = vim.uv or vim.loop
+        lua_setfield(L, uv_share, "uv");        // uv or loop <= stack
+
+        // get timestamp ASAP
+        ask_timestamp(x);
+#endif // WITH_LUV
+
+#ifdef WITH_THREADS
         // start thread
         pthread_mutex_init(&x->lock, NULL);
         pthread_create(&x->tid, NULL, thread_main, x);
+#endif // WITH_THREADS
     }
 
     lua_pushnil(L);
@@ -174,13 +148,53 @@ static int neo__gc(lua_State* L)
 {
     neo_X* x = (neo_X*)neo_checkud(L, 1);
 
-    // clear data
+#ifdef WITH_LUV
+    lua_getfield(L, uv_share, "uv");    // uv or loop => stack
+    // uv.poll_stop(uv_share.poll)
+    lua_getfield(L, -1, "poll_stop");
+    lua_getfield(L, uv_share, "poll");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // uv.close(poll)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "poll");
+        lua_call(L, 1, 0);
+        // uv_share.poll = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "poll");
+    }
+
+    // uv.prepare_stop(prepare)
+    lua_getfield(L, -1, "prepare_stop");
+    lua_getfield(L, uv_share, "prepare");
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 2);
+    } else {
+        lua_call(L, 1, 0);
+        // uv.close(prepare)
+        lua_getfield(L, -1, "close");
+        lua_getfield(L, uv_share, "prepare");
+        lua_call(L, 1, 0);
+        // uv_share.prepare = nil
+        lua_pushnil(L);
+        lua_setfield(L, uv_share, "prepare");
+    }
+#endif // WITH_LUV
+
+#ifdef WITH_THREADS
     client_message(x, wm_proto, wm_dele);
     pthread_join(x->tid, NULL);
     pthread_mutex_destroy(&x->lock);
-    for (int i = 0; i < sel_total; ++i) {
-        pthread_cond_destroy(&x->c_rdy[i]);
+#endif // WITH_THREADS
+
+    // clear data
+    for (size_t i = 0; i < sel_total; ++i) {
         free(x->data[i]);
+#ifdef WITH_THREADS
+        pthread_cond_destroy(&x->c_rdy[i]);
+#endif // WITH_THREADS
     }
     XDestroyWindow(x->d, x->w);
     XCloseDisplay(x->d);
@@ -194,6 +208,7 @@ void neo_fetch(lua_State* L, int ix, int sel)
 {
     neo_X* x = neo_x(L);
     if (x != NULL && neo_lock(x)) {
+#ifdef WITH_THREADS
         // send request
         x->f_rdy[sel] = false;
         client_message(x, neo_ready, sel);
@@ -206,6 +221,25 @@ void neo_fetch(lua_State* L, int ix, int sel)
                 && pthread_cond_timedwait(&x->c_rdy[sel], &x->lock, &t) == 0)
                 /*nothing*/;
         }
+#endif // WITH_THREADS
+
+#ifdef WITH_LUV
+        // attempt to convert selection
+        Window owner = XGetSelectionOwner(x->d, x->atom[sel]);
+        if (owner == x->w) {
+            // no conversion needed
+            neo_signal(x, sel);
+        } else if (owner == None) {
+            // empty selection
+            neo_own(x, false, sel, NULL, 0, 0);
+        } else {
+            // what TARGETS are supported?
+            x->f_rdy[sel] = false;
+            XConvertSelection(x->d, x->atom[sel], x->atom[targets], x->atom[neo_ready],
+                x->w, time_diff(x->delta));
+            modal_loop(L, &x->f_rdy[sel], 1000);
+        }
+#endif // WITH_LUV
 
         // split selection into t[ix]
         if (x->f_rdy[sel] && x->cb[sel] > 0)
@@ -233,7 +267,11 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
         x->stamp[sel] = time_diff(x->delta);
 
         if (offer)
+#ifdef WITH_THREADS
             client_message(x, neo_offer, sel);
+#else
+            XSetSelectionOwner(x->d, x->atom[sel], x->w, x->stamp[sel]);
+#endif // WITH_THREADS
         else
             neo_signal(x, sel);
 
@@ -242,73 +280,97 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 }
 
 
-// lock selection data
-static inline bool neo_lock(neo_X* x)
+#ifdef WITH_LUV
+// uv_prepare_t callback
+static int cb_prepare(lua_State* L)
 {
-    return (pthread_mutex_lock(&x->lock) == 0);
+    neo_X* x = neo_x(L);
+    if (x != NULL) {
+        XEvent xe;
+        while (XPending(x->d) > 0) {
+            XNextEvent(x->d, &xe);
+            dispatch_event(x, &xe);
+        }
+    }
+
+    return 0;
 }
+#endif // WITH_LUV
 
 
-// unlock selection data
-static inline bool neo_unlock(neo_X* x)
+#ifdef WITH_LUV
+// uv_poll_t callback
+static int cb_poll(lua_State* L)
 {
-    return (pthread_mutex_unlock(&x->lock) == 0);
+    neo_X* x = neo_x(L);
+    if (x != NULL && lua_isnil(L, 1) && strchr(lua_tostring(L, 2), 'r') != NULL) {
+        XEvent xe;
+        XNextEvent(x->d, &xe);
+        dispatch_event(x, &xe);
+    }
+
+    return 0;
 }
+#endif // WITH_LUV
 
 
-// signal data ready
-static inline bool neo_signal(neo_X* x, int sel)
-{
-    x->f_rdy[sel] = true;
-    return (pthread_cond_signal(&x->c_rdy[sel]) == 0);
-}
-
-
+#ifdef WITH_THREADS
 // thread entry point
 static void* thread_main(void* X)
 {
     neo_X* x = (neo_X*)X;
+    XEvent xe;
 
-    // force property change to get timestamp from X server
-    XSelectInput(x->d, x->w, PropertyChangeMask);
-    XChangeProperty(x->d, x->w, x->atom[timestamp], x->atom[timestamp], 32,
-        PropModeAppend, NULL, 0);
-
-    bool stop = false;
+    ask_timestamp(x);
     do {
-        XEvent xe;
         XNextEvent(x->d, &xe);
-        switch (xe.type) {
-        case PropertyNotify:
-            if (xe.xproperty.atom == x->atom[timestamp]) {
-                x->delta = time_diff(xe.xproperty.time);
-                XSelectInput(x->d, x->w, NoEventMask);
-            }
-        break;
-        case SelectionClear:
-            if (xe.xselectionclear.window == x->w && neo_lock(x)) {
-                alloc_data(x, atom2sel(x, xe.xselectionclear.selection), 0);
-                neo_unlock(x);
-            }
-        break;
-        case SelectionNotify:
-            stop = on_sel_notify(x, &xe.xselection);
-        break;
-        case SelectionRequest:
-            on_sel_request(x, &xe.xselectionrequest);
-        break;
-        case ClientMessage:
-            stop = on_client_message(x, &xe.xclient);
-        break;
-        }
-    } while (!stop);
+    } while (dispatch_event(x, &xe));
 
     return NULL;
+}
+#endif // WITH_THREADS
+
+
+// X event dispatcher
+static bool dispatch_event(neo_X* x, XEvent* xe)
+{
+    switch (xe->type) {
+    case ClientMessage:
+#ifdef WITH_THREADS
+        return on_client_message(x, &xe->xclient);
+#endif // WITH_THREADS
+    break;
+    case PropertyNotify:
+        if (xe->xproperty.atom == x->atom[timestamp]) {
+            x->delta = time_diff(xe->xproperty.time);
+            XSelectInput(x->d, x->w, NoEventMask);
+        }
+    break;
+    case SelectionClear:
+        if (xe->xselectionclear.window == x->w && neo_lock(x)) {
+            alloc_data(x, atom2sel(x, xe->xselectionclear.selection), 0);
+            neo_unlock(x);
+        }
+    break;
+    case SelectionNotify:
+        on_sel_notify(x, &xe->xselection);
+#ifdef WITH_THREADS
+        // exit upon SAVE_TARGETS: anyone supporting this?
+        if (xe->xselection.property == None && xe->xselection.target == x->atom[save])
+            return false;
+#endif // WITH_THREADS
+    break;
+    case SelectionRequest:
+        on_sel_request(x, &xe->xselectionrequest);
+    break;
+    }
+
+    return true;
 }
 
 
 // SelectionNotify event handler
-static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
+static void on_sel_notify(neo_X* x, XSelectionEvent* xse)
 {
     int sel = atom2sel(x, xse->selection);
 
@@ -347,7 +409,7 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
                 // nothing to do
             } else if (type == x->atom[atom] || type == x->atom[targets]) {
                 // TARGETS
-                Atom target = best_target(x, (Atom*)buf, (int)cb);
+                Atom target = best_target(x, (Atom*)buf, cb);
                 if (target != None) {
                     XConvertSelection(x->d, xse->selection, target, x->atom[neo_ready],
                         x->w, xse->time);
@@ -401,14 +463,9 @@ static bool on_sel_notify(neo_X* x, XSelectionEvent* xse)
         if (xptr != NULL)
             XFree(xptr);
     } else if (xse->property == None) {
-        // exit upon SAVE_TARGETS: anyone supporting this?
-        if (xse->target == x->atom[save])
-            return true;
         // peer error
         neo_own(x, false, sel, NULL, 0, 0);
     }
-
-    return false;
 }
 
 
@@ -471,6 +528,7 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
 }
 
 
+#ifdef WITH_THREADS
 // ClientMessage event handler
 static bool on_client_message(neo_X* x, XClientMessageEvent* xcme)
 {
@@ -499,20 +557,21 @@ static bool on_client_message(neo_X* x, XClientMessageEvent* xcme)
         XSetSelectionOwner(x->d, param, x->w, x->stamp[sel]);
     } else if (xcme->message_type == x->atom[wm_proto] && param == x->atom[wm_dele]) {
         // WM_DELETE_WINDOW
-        for (int i = 0; i < sel_total; ++i) {
+        for (size_t i = 0; i < sel_total; ++i) {
             if (XGetSelectionOwner(x->d, x->atom[i]) == x->w) {
                 // ask CLIPBOARD_MANAGER to SAVE_TARGETS first
                 XConvertSelection(x->d, x->atom[clipman], x->atom[save], None, x->w,
                     (Time)xcme->data.l[1]);
-                return false;
+                return true;
             }
         }
         // stop by WM_DELETE_WINDOW
-        return true;
+        return false;
     }
 
-    return false;
+    return true;
 }
+#endif // WITH_THREADS
 
 
 // (re-)allocate data buffer for selection
@@ -535,10 +594,19 @@ static size_t alloc_data(neo_X* x, int sel, size_t cb)
 }
 
 
+// force property change to get timestamp from X server
+static void ask_timestamp(neo_X* x)
+{
+    XSelectInput(x->d, x->w, PropertyChangeMask);
+    XChangeProperty(x->d, x->w, x->atom[timestamp], x->atom[timestamp], 32,
+        PropModeAppend, NULL, 0);
+}
+
+
 // Atom => selection index
 static int atom2sel(neo_X* x, Atom atom)
 {
-    for (int i = 0; i < sel_total; ++i)
+    for (size_t i = 0; i < sel_total; ++i)
         if (atom == x->atom[i])
             return i;
 
@@ -547,12 +615,12 @@ static int atom2sel(neo_X* x, Atom atom)
 
 
 // get best matching target atom
-static Atom best_target(neo_X* x, Atom* atom, int count)
+static Atom best_target(neo_X* x, Atom* atom, size_t count)
 {
-    int best = total;
+    size_t best = total;
 
-    for (int i = 0; i < count && best > vimenc; ++i)
-        for (int j = vimenc; j < best; ++j)
+    for (size_t i = 0; i < count && best > vimenc; ++i)
+        for (size_t j = vimenc; j < best; ++j)
             if (atom[i] == x->atom[j]) {
                 best = j;
                 break;
@@ -562,6 +630,7 @@ static Atom best_target(neo_X* x, Atom* atom, int count)
 }
 
 
+#ifdef WITH_THREADS
 // send ClientMessage to our thread
 static void client_message(neo_X* x, int message, int param)
 {
@@ -581,6 +650,7 @@ static void client_message(neo_X* x, int message, int param)
     XSendEvent(x->d, x->w, False, NoEventMask, (XEvent*)&xcme);
     XFlush(x->d);
 }
+#endif // WITH_THREADS
 
 
 // X11 predicate function: PropertyNotify/PropertyNewValue
@@ -596,6 +666,42 @@ static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg)
     return (xpe->window == xse->requestor && xpe->atom == xse->property
         && xpe->time >= xse->time && xpe->state == PropertyNewValue);
 }
+
+
+#ifdef WITH_LUV
+// run uv_loop until stop condition or time out
+static void modal_loop(lua_State* L, bool* stop, uint32_t timeout)
+{
+    lua_getfield(L, uv_share, "uv");    // uv or loop => stack
+
+    // local now, till = uv.now() + timeout
+    lua_Integer now, till;
+    lua_getfield(L, -1, "now");
+    lua_call(L, 0, 1);
+    till = lua_tointeger(L, -1) + timeout;
+    lua_pop(L, 1);
+
+    // run nested loop
+    do {
+        // uv.run"once"
+        lua_getfield(L, -1, "run");
+        lua_pushliteral(L, "once");
+        lua_call(L, 1, 0);
+
+        // check stop condition
+        if (*stop)
+            break;
+
+        // now = uv.now()
+        lua_getfield(L, -1, "now");
+        lua_call(L, 0, 1);
+        now = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    } while (now < till);
+
+    lua_pop(L, 1);                      // uv or loop <= stack
+}
+#endif // WITH_LUV
 
 
 // get ms difference from reference time
@@ -618,17 +724,16 @@ static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse)
     XGetWindowProperty(x->d, xse->requestor, xse->property, 0, LONG_MAX, False,
         x->atom[atom_pair], &(Atom){None}, &(int){0}, &ul_tgt, &(unsigned long){0},
         (unsigned char**)&tgt);
-    int i_tgt = (long)ul_tgt;
 
-    for (int i = 0; i < i_tgt; i += 2)
+    for (size_t i = 0; i < ul_tgt; i += 2)
         if (best_target(x, &tgt[i], 1) != None && tgt[i + 1] != None)
             to_property(x, sel, xse->requestor, tgt[i + 1], tgt[i]);
         else
             tgt[i + 1] = None;
 
-    if (i_tgt > 0) {
+    if (ul_tgt > 0) {
         XChangeProperty(x->d, xse->requestor, xse->property, x->atom[atom_pair], 32,
-            PropModeReplace, (unsigned char*)tgt, i_tgt);
+            PropModeReplace, (unsigned char*)tgt, (int)ul_tgt);
         XFree(tgt);
     }
 }
