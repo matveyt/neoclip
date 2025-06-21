@@ -1,19 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 23
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neoclip_nix.h"
-
-
-// forward prototypes
-static int neo_stop(lua_State* L);
-static int neo_status(lua_State* L);
-static int neo_get(lua_State* L);
-static int neo_set(lua_State* L);
 
 
 // module registration
@@ -49,7 +42,7 @@ int luaopen_driver(lua_State* L)
 
 
 // invalidate state
-static int neo_stop(lua_State* L)
+int neo_stop(lua_State* L)
 {
     // uv_share.x = nil
     lua_pushnil(L);
@@ -63,7 +56,7 @@ static int neo_stop(lua_State* L)
 
 
 // get status
-static int neo_status(lua_State* L)
+int neo_status(lua_State* L)
 {
     lua_pushboolean(L, neo_x(L) != NULL);
     return 1;
@@ -71,7 +64,7 @@ static int neo_status(lua_State* L)
 
 
 // get(regname) => [lines, regtype]
-static int neo_get(lua_State* L)
+int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     int sel = (*lua_tostring(L, 1) == '*') ? sel_prim : sel_clip;
@@ -86,7 +79,7 @@ static int neo_get(lua_State* L)
 
 
 // set(regname, lines, regtype) => boolean
-static int neo_set(lua_State* L)
+int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname
     luaL_checktype(L, 2, LUA_TTABLE);   // lines

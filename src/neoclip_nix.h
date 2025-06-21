@@ -1,12 +1,12 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 19
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#ifndef NEOCLIP_NIX_H
+#if !defined(NEOCLIP_NIX_H)
 #define NEOCLIP_NIX_H
 
 #if !defined(_POSIX_C_SOURCE)
@@ -33,7 +33,6 @@ enum {
 // driver state : incomplete type
 typedef struct neo_X neo_X;
 
-int neo_start(lua_State* L);
 void neo_fetch(lua_State* L, int ix, int sel);
 void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type);
 

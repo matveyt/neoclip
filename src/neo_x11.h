@@ -1,21 +1,19 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 20
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#ifndef NEO_X11_H
+#if !defined(NEO_X11_H)
 #define NEO_X11_H
 
 #include "neoclip_nix.h"
-#include <limits.h>
-#include <time.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 #include <pthread.h>
 #endif // WITH_THREADS
 
@@ -64,14 +62,13 @@ struct neo_X {
     size_t cb[sel_total];               // Selection: text size only
     Time stamp[sel_total];              // Selection: time stamp
     bool f_rdy[sel_total];              // Selection: "ready" flag
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     pthread_cond_t c_rdy[sel_total];    // Selection: "ready" condition
     pthread_mutex_t lock;               // Mutex lock
     pthread_t tid;                      // Thread ID
 #endif // WITH_THREADS
 };
 
-static int neo__gc(lua_State* L);
 static bool dispatch_event(neo_X* x, XEvent* xe);
 static void on_sel_notify(neo_X* x, XSelectionEvent* xse);
 static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre);
@@ -84,13 +81,13 @@ static Time time_diff(Time ref);
 static void to_multiple(neo_X* x, int sel, XSelectionEvent* xse);
 static void to_property(neo_X* x, int sel, Window w, Atom property, Atom type);
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 static int cb_prepare(lua_State* L);
 static int cb_poll(lua_State* L);
 static void modal_loop(lua_State* L, bool* stop, uint32_t timeout);
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 static void* thread_main(void* X);
 static bool on_client_message(neo_X* X, XClientMessageEvent* xcme);
 static void client_message(neo_X* x, int message, int param);
@@ -100,7 +97,7 @@ static void client_message(neo_X* x, int message, int param);
 // inline helpers
 static inline bool neo_lock(neo_X* x)
 {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     return (pthread_mutex_lock(&x->lock) == 0);
 #else
     (void)x;    // unused
@@ -109,7 +106,7 @@ static inline bool neo_lock(neo_X* x)
 }
 static inline bool neo_unlock(neo_X* x)
 {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     return (pthread_mutex_unlock(&x->lock) == 0);
 #else
     (void)x;    // unused
@@ -119,7 +116,7 @@ static inline bool neo_unlock(neo_X* x)
 static inline bool neo_signal(neo_X* x, int sel)
 {
     x->f_rdy[sel] = true;
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     return (pthread_cond_signal(&x->c_rdy[sel]) == 0);
 #else
     return true;

@@ -1,16 +1,23 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 20
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neo_wayland.h"
+#include <unistd.h>
+
+#if defined(WITH_THREADS)
+#include <poll.h>
+#include <signal.h>
+#include <sys/signalfd.h>
+#endif // WITH_THREADS
 
 
 // supported mime types (from best to worst)
-static const char* mime[] = {
+static const char* const mime[] = {
     [0] = "_VIMENC_TEXT",
     [1] = "_VIM_TEXT",
     "text/plain;charset=utf-8",
@@ -119,7 +126,7 @@ int neo_start(lua_State* L)
         // uv_share.x = x
         lua_setfield(L, uv_share, "x");
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
         // start polling display
         lua_getglobal(L, "vim");                // vim.uv or vim.loop => stack
         lua_getfield(L, -1, "uv");
@@ -157,7 +164,7 @@ int neo_start(lua_State* L)
         lua_setfield(L, uv_share, "uv");        // vim.uv or vim.loop <= stack
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         // start thread
         pthread_mutex_init(&x->lock, NULL);
         pthread_create(&x->tid, NULL, thread_main, x);
@@ -170,11 +177,11 @@ int neo_start(lua_State* L)
 
 
 // destroy state
-static int neo__gc(lua_State* L)
+int neo__gc(lua_State* L)
 {
     neo_X* x = (neo_X*)neo_checkud(L, 1);
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
     lua_getfield(L, uv_share, "uv");    // uv or loop => stack
     // uv.poll_stop(uv_share.poll)
     lua_getfield(L, -1, "poll_stop");
@@ -209,7 +216,7 @@ static int neo__gc(lua_State* L)
     }
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     pthread_kill(x->tid, SIGTERM);
     pthread_join(x->tid, NULL);
     pthread_mutex_destroy(&x->lock);
@@ -272,7 +279,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
             break;
             }
             wl_display_flush(x->d);
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
             // dispatch in the polling thread only!
             wl_display_roundtrip(x->d);
 #endif // WITH_LUV
@@ -283,7 +290,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 }
 
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 // uv_prepare_t callback
 static int cb_prepare(lua_State* L)
 {
@@ -296,7 +303,7 @@ static int cb_prepare(lua_State* L)
 #endif // WITH_LUV
 
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 // uv_poll_t callback
 static int cb_poll(lua_State* L)
 {
@@ -310,7 +317,7 @@ static int cb_poll(lua_State* L)
 #endif // WITH_LUV
 
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 // thread entry point
 static void* thread_main(void* X)
 {

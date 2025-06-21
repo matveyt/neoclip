@@ -6,7 +6,7 @@
  */
 
 
-#ifndef NEOCLIP_H
+#if !defined(NEOCLIP_H)
 #define NEOCLIP_H
 
 #include <stdarg.h>
@@ -19,7 +19,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 
-#ifndef _countof
+#if !defined(_countof)
 #define _countof(o) (sizeof(o) / sizeof(o[0]))
 #endif // _countof
 
@@ -40,8 +40,18 @@ enum {
 // userdata : incomplete type
 typedef struct neo_UD neo_UD;
 
+// API implementation
+int neo_start(lua_State* L);    // lua_CFunction() => nil or error
+int neo_stop(lua_State* L);     // lua_CFunction() => nil
+int neo_status(lua_State* L);   // lua_CFunction() => boolean
+int neo_get(lua_State* L);      // lua_CFunction(reg) => {string_array, type}
+int neo_set(lua_State* L);      // lua_CFunction(reg, string_array, type) => boolean
+int neo__gc(lua_State* L);      // destroy state
+
 // neo_common.c
-int neo_id(lua_State* L);   // lua_CFunction(uv_module) => string
+int neo_id(lua_State* L);       // lua_CFunction(uv_module) => string
+int neo_nil(lua_State* L);      // lua_CFunction() => nil
+int neo_true(lua_State* L);     // lua_CFunction() => true
 void neo_join(lua_State* L, int ix, const char* sep);
 void neo_split(lua_State* L, int ix, const void* data, size_t cb, int type);
 void neo_inspect(lua_State* L, int ix);                 // debug only

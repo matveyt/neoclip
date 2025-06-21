@@ -1,25 +1,21 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 20
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
-#ifndef NEO_WAYLAND_H
+#if !defined(NEO_WAYLAND_H)
 #define NEO_WAYLAND_H
 
 #include "neoclip_nix.h"
-#include <unistd.h>
 #include <wayland-client-core.h>
 #include <wayland-ext-data-control-client-protocol.h>
 #include <wayland-wlr-data-control-client-protocol.h>
 
-#ifdef WITH_THREADS
-#include <poll.h>
+#if defined(WITH_THREADS)
 #include <pthread.h>
-#include <signal.h>
-#include <sys/signalfd.h>
 #endif // WITH_THREADS
 
 // simplify Wayland listeners declaration
@@ -54,7 +50,7 @@ struct neo_X {
     const struct wl_interface* dcs_iface;       // ext or zwlr
     uint8_t* data[sel_total];                   // Selection: _VIMENC_TEXT
     size_t cb[sel_total];                       // Selection: text size only
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     pthread_mutex_t lock;                       // Mutex lock
     pthread_t tid;                              // Thread ID
 #endif // WITH_THREADS
@@ -80,7 +76,6 @@ static void data_control_source_send_clip(void* X,
 static void data_control_source_cancelled(void* X,
     struct ext_data_control_source_v1* dcs);
 
-static int neo__gc(lua_State* L);
 static size_t alloc_data(neo_X* x, int sel, size_t cb);
 static int dispatch_event(struct wl_display* d, bool valid);
 static int prepare_event(struct wl_display* d);
@@ -89,19 +84,19 @@ static void sel_write(neo_X* x, int sel, const char* mime_type, int fd);
 static void* offer_read(neo_X* x, struct ext_data_control_offer_v1* offer,
     const char* mime, size_t* pcb);
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 static int cb_prepare(lua_State* L);
 static int cb_poll(lua_State* L);
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 static void* thread_main(void* X);
 #endif // WITH_THREADS
 
 // inline helpers
 static inline bool neo_lock(neo_X* x)
 {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     return (pthread_mutex_lock(&x->lock) == 0);
 #else
     (void)x;    // unused
@@ -110,7 +105,7 @@ static inline bool neo_lock(neo_X* x)
 }
 static inline bool neo_unlock(neo_X* x)
 {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     return (pthread_mutex_unlock(&x->lock) == 0);
 #else
     (void)x;    // unused

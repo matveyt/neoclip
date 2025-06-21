@@ -1,12 +1,14 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2025 Jun 20
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
 
 
 #include "neo_x11.h"
+#include <limits.h>
+#include <time.h>
 
 
 // init state and start thread
@@ -14,7 +16,7 @@ int neo_start(lua_State* L)
 {
     neo_X* x = neo_x(L);
     if (x == NULL) {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         // initialize X threads (required for xcb)
         if (!neo_did(L, "XInitThreads")) {
             if (XInitThreads() == False) {
@@ -35,7 +37,7 @@ int neo_start(lua_State* L)
         }
 
         // atom names
-        static /*const*/ char* atom_name[total] = {
+        static /*const*/ char* /*const*/ atom_name[total] = {
             [sel_prim] = "PRIMARY",
             [sel_sec] = "SECONDARY",
             [sel_clip] = "CLIPBOARD",
@@ -68,7 +70,7 @@ int neo_start(lua_State* L)
         x->w = XCreateSimpleWindow(x->d, XDefaultRootWindow(x->d), 0, 0, 1, 1, 0, 0, 0);
         x->delta = CurrentTime;
         XInternAtoms(x->d, atom_name, total, False, x->atom);
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         XSetWMProtocols(x->d, x->w, &x->atom[wm_dele], 1);
 #endif // WITH_THREADS
         for (size_t i = 0; i < sel_total; ++i) {
@@ -76,7 +78,7 @@ int neo_start(lua_State* L)
             x->cb[i] = 0;
             x->stamp[i] = CurrentTime;
             x->f_rdy[i] = false;
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
             pthread_cond_init(&x->c_rdy[i], NULL);
 #endif // WITH_THREADS
         }
@@ -90,7 +92,7 @@ int neo_start(lua_State* L)
         // uv_share.x = x
         lua_setfield(L, uv_share, "x");
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
         // start polling the display
         lua_getglobal(L, "vim");                // vim.uv or vim.loop => stack
         lua_getfield(L, -1, "uv");
@@ -131,7 +133,7 @@ int neo_start(lua_State* L)
         ask_timestamp(x);
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         // start thread
         pthread_mutex_init(&x->lock, NULL);
         pthread_create(&x->tid, NULL, thread_main, x);
@@ -144,11 +146,11 @@ int neo_start(lua_State* L)
 
 
 // destroy state
-static int neo__gc(lua_State* L)
+int neo__gc(lua_State* L)
 {
     neo_X* x = (neo_X*)neo_checkud(L, 1);
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
     lua_getfield(L, uv_share, "uv");    // uv or loop => stack
     // uv.poll_stop(uv_share.poll)
     lua_getfield(L, -1, "poll_stop");
@@ -183,7 +185,7 @@ static int neo__gc(lua_State* L)
     }
 #endif // WITH_LUV
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
     client_message(x, wm_proto, wm_dele);
     pthread_join(x->tid, NULL);
     pthread_mutex_destroy(&x->lock);
@@ -192,7 +194,7 @@ static int neo__gc(lua_State* L)
     // clear data
     for (size_t i = 0; i < sel_total; ++i) {
         free(x->data[i]);
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         pthread_cond_destroy(&x->c_rdy[i]);
 #endif // WITH_THREADS
     }
@@ -208,7 +210,7 @@ void neo_fetch(lua_State* L, int ix, int sel)
 {
     neo_X* x = neo_x(L);
     if (x != NULL && neo_lock(x)) {
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         // send request
         x->f_rdy[sel] = false;
         client_message(x, neo_ready, sel);
@@ -223,7 +225,7 @@ void neo_fetch(lua_State* L, int ix, int sel)
         }
 #endif // WITH_THREADS
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
         // attempt to convert selection
         Window owner = XGetSelectionOwner(x->d, x->atom[sel]);
         if (owner == x->w) {
@@ -267,7 +269,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
         x->stamp[sel] = time_diff(x->delta);
 
         if (offer)
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
             client_message(x, neo_offer, sel);
 #else
             XSetSelectionOwner(x->d, x->atom[sel], x->w, x->stamp[sel]);
@@ -280,7 +282,7 @@ void neo_own(neo_X* x, bool offer, int sel, const void* ptr, size_t cb, int type
 }
 
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 // uv_prepare_t callback
 static int cb_prepare(lua_State* L)
 {
@@ -298,7 +300,7 @@ static int cb_prepare(lua_State* L)
 #endif // WITH_LUV
 
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 // uv_poll_t callback
 static int cb_poll(lua_State* L)
 {
@@ -314,7 +316,7 @@ static int cb_poll(lua_State* L)
 #endif // WITH_LUV
 
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 // thread entry point
 static void* thread_main(void* X)
 {
@@ -336,7 +338,7 @@ static bool dispatch_event(neo_X* x, XEvent* xe)
 {
     switch (xe->type) {
     case ClientMessage:
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         return on_client_message(x, &xe->xclient);
 #endif // WITH_THREADS
     break;
@@ -354,7 +356,7 @@ static bool dispatch_event(neo_X* x, XEvent* xe)
     break;
     case SelectionNotify:
         on_sel_notify(x, &xe->xselection);
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
         // exit upon SAVE_TARGETS: anyone supporting this?
         if (xe->xselection.property == None && xe->xselection.target == x->atom[save])
             return false;
@@ -528,7 +530,7 @@ static void on_sel_request(neo_X* x, XSelectionRequestEvent* xsre)
 }
 
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 // ClientMessage event handler
 static bool on_client_message(neo_X* x, XClientMessageEvent* xcme)
 {
@@ -630,7 +632,7 @@ static Atom best_target(neo_X* x, Atom* atom, size_t count)
 }
 
 
-#ifdef WITH_THREADS
+#if defined(WITH_THREADS)
 // send ClientMessage to our thread
 static void client_message(neo_X* x, int message, int param)
 {
@@ -668,7 +670,7 @@ static Bool is_incr_notify(Display* d, XEvent* xe, XPointer arg)
 }
 
 
-#ifdef WITH_LUV
+#if defined(WITH_LUV)
 // run uv_loop until stop condition or time out
 static void modal_loop(lua_State* L, bool* stop, uint32_t timeout)
 {

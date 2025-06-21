@@ -1,6 +1,6 @@
 /*
  * neoclip - Neovim clipboard provider
- * Last Change:  2024 Aug 21
+ * Last Change:  2025 Jun 21
  * License:      https://unlicense.org
  * URL:          https://github.com/matveyt/neoclip
  */
@@ -12,13 +12,6 @@
 
 // Vim compatible format
 static NSString* VimPboardType = @"VimPboardType";
-
-
-// forward prototypes
-static int neo_nil(lua_State* L);
-static int neo_true(lua_State* L);
-static int neo_get(lua_State* L);
-static int neo_set(lua_State* L);
 
 
 // module registration
@@ -52,24 +45,8 @@ int luaopen_driver(lua_State* L)
 }
 
 
-// lua_CFunction() => nil
-static int neo_nil(lua_State* L)
-{
-    lua_pushnil(L);
-    return 1;
-}
-
-
-// lua_CFunction() => true
-static int neo_true(lua_State* L)
-{
-    lua_pushboolean(L, true);
-    return 1;
-}
-
-
 // get(regname) => [lines, regtype]
-static int neo_get(lua_State* L)
+int neo_get(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
 
@@ -110,7 +87,7 @@ static int neo_get(lua_State* L)
 
 
 // set(regname, lines, regtype) => boolean
-static int neo_set(lua_State* L)
+int neo_set(lua_State* L)
 {
     luaL_checktype(L, 1, LUA_TSTRING);  // regname (unused)
     luaL_checktype(L, 2, LUA_TTABLE);   // lines

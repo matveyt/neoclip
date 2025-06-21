@@ -1,6 +1,6 @@
 #
 # neoclip - Neovim clipboard provider
-# Last Change:  2025 Jun 19
+# Last Change:  2025 Jun 21
 # License:      https://unlicense.org
 # URL:          https://github.com/matveyt/neoclip
 #
@@ -43,6 +43,7 @@ else # *nix
   wl_scanner = find_program('wayland-scanner', required : false, native : true)
   if wl_scanner.found()
     ext_data_control_xml = 'extra/ext-data-control-v1.xml'
+    wlr_data_control_xml = 'extra/wlr-data-control-unstable-v1.xml'
     ext_data_control = [
       custom_target('ext-data-control-c', input : ext_data_control_xml,
         output : 'wayland-ext-data-control-protocol.c',
@@ -51,7 +52,6 @@ else # *nix
         output : 'wayland-ext-data-control-client-protocol.h',
         command : [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@']),
     ]
-    wlr_data_control_xml = 'extra/wlr-data-control-unstable-v1.xml'
     wlr_data_control = [
       custom_target('wlr-data-control-c', input : wlr_data_control_xml,
         output : 'wayland-wlr-data-control-protocol.c',
@@ -65,6 +65,7 @@ else # *nix
   # x11-driver
   if x11.found() and threads.found()
     x11_sources = ['neoclip_nix.c', 'neo_x11.c', 'neo_common.c']
+    x11_args = '-DWITH_THREADS'
     x11_deps = [x11, threads]
   endif
 
@@ -78,6 +79,7 @@ else # *nix
   if wl_client.found() and wl_scanner.found() and threads.found()
     wl_sources = ['neoclip_nix.c', 'neo_wayland.c', 'neo_common.c',
       ext_data_control, wlr_data_control]
+    wl_args = '-DWITH_THREADS'
     wl_deps = [wl_client, threads]
   endif
 
@@ -92,13 +94,12 @@ endif
 foreach t : ['w32', 'mac', 'x11', 'x11uv', 'wl', 'wluv']
   name = t + '-driver'
   sources = get_variable(t + '_sources', [])
+  args = get_variable(t + '_args', [])
   deps = get_variable(t + '_deps', []) + [lua]
-  defines = is_variable('threads') and deps.contains(threads) ? '-DWITH_THREADS' : []
-  suffix = host_machine.system() == 'darwin' ? 'so' : []
   if get_variable(t + '_target', false) and sources != []
     message('Building `@0@\''.format(name))
-    shared_module(name, sources, c_args : defines, dependencies : deps,
+    shared_module(name, sources, c_args : args, dependencies : deps,
       gnu_symbol_visibility : 'internal', install : true, install_dir : 'lua/neoclip',
-      name_prefix : '', name_suffix : suffix)
+      name_prefix : '', name_suffix : host_machine.system() == 'darwin' ? 'so' : [])
   endif
 endforeach

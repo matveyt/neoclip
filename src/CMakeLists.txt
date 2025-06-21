@@ -1,6 +1,6 @@
 #[[
     neoclip - Neovim clipboard provider
-    Last Change:    2025 Jun 19
+    Last Change:    2025 Jun 21
     License:        https://unlicense.org
     URL:            https://github.com/matveyt/neoclip
 #]]
@@ -48,13 +48,10 @@ find_path(LUA_INCLUDE_DIRS luajit.h PATHS "${PC_LUAJIT_INCLUDEDIR}"
 
 # create/install target with Lua dependency
 function(neo_module name)
-    cmake_parse_arguments(NEO "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
+    cmake_parse_arguments(NEO "" "" "SOURCES;DEFINITIONS;LIBRARIES;INCLUDE_DIRS" ${ARGN})
     add_library(${name} MODULE ${NEO_SOURCES})
+    target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS} ${NEO_DEFINITIONS})
     target_link_libraries(${name} ${LUA_LIBRARIES} ${NEO_LIBRARIES})
-    if(Threads::Threads IN_LIST NEO_LIBRARIES)
-        target_compile_definitions(${name} PRIVATE "WITH_THREADS")
-    endif()
-    target_compile_definitions(${name} PRIVATE ${LUA_DEFINITIONS})
     target_include_directories(${name} PRIVATE ${LUA_INCLUDE_DIRS} ${NEO_INCLUDE_DIRS})
     install(TARGETS ${name} DESTINATION "lua/neoclip" PERMISSIONS OWNER_READ OWNER_WRITE)
 endfunction()
@@ -93,6 +90,7 @@ elseif(UNIX)
     # x11-driver
     if(X11_LIBRARIES AND Threads_FOUND)
         set(x11_sources "neoclip_nix.c" "neo_x11.c" "neo_common.c")
+        set(x11_definitions "WITH_THREADS")
         set(x11_libraries "${X11_LIBRARIES}" Threads::Threads)
     endif()
 
@@ -106,6 +104,7 @@ elseif(UNIX)
     if(Wayland_FOUND AND WaylandScanner_FOUND AND Threads_FOUND)
         set(wl_sources "neoclip_nix.c" "neo_wayland.c" "neo_common.c"
             "${ext_data_control}" "${wlr_data_control}")
+        set(wl_definitions "WITH_THREADS")
         set(wl_libraries "${Wayland_LIBRARIES}" Threads::Threads)
         set(wl_include_dirs "${CMAKE_CURRENT_BINARY_DIR}")
     endif()
@@ -122,7 +121,7 @@ endif()
 foreach(t w32 mac x11 x11uv wl wluv)
     if(${t}_target AND ${t}_sources)
         message("Building `${t}-driver'")
-        neo_module(${t}-driver SOURCES ${${t}_sources} LIBRARIES ${${t}_libraries}
-            INCLUDE_DIRS ${${t}_include_dirs})
+        neo_module(${t}-driver SOURCES ${${t}_sources} DEFINITIONS ${${t}_definitions}
+            LIBRARIES ${${t}_libraries} INCLUDE_DIRS ${${t}_include_dirs})
     endif()
 endforeach()
